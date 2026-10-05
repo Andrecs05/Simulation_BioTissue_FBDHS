@@ -4,6 +4,8 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+DATA_DIR = Path(__file__).resolve().parent.parent / "lammps_data"
+
 
 @dataclass
 class Atom:
@@ -157,6 +159,10 @@ def main() -> None:
     parser.add_argument("--dump-every", type=int, default=100)
     parser.add_argument("--run-steps", type=int, default=1000)
     args = parser.parse_args()
+
+    # A bare filename is looked up in lammps_data/
+    if not args.input.exists():
+        args.input = DATA_DIR / args.input
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     data_path = args.data or args.output.with_suffix(".data")

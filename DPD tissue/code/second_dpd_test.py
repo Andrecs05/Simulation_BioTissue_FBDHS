@@ -1,8 +1,13 @@
 import sys
 import re
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "lammps_data"
+GRAPHS_DIR = BASE_DIR / "graphs"
 
 
 # ============================================================
@@ -390,8 +395,10 @@ def main(logfile):
 
     plt.tight_layout()
 
+    GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
+
     plt.savefig(
-        "msd_all_simulations.png",
+        GRAPHS_DIR / "msd_all_simulations.png",
         dpi=200
     )
 
@@ -436,7 +443,7 @@ def main(logfile):
     plt.tight_layout()
 
     plt.savefig(
-        "alpha_vs_Ntrace.png",
+        GRAPHS_DIR / "alpha_vs_Ntrace.png",
         dpi=200
     )
 
@@ -451,7 +458,7 @@ def main(logfile):
     )
 
     np.savetxt(
-        "alpha_vs_Ntrace.txt",
+        BASE_DIR / "alpha_vs_Ntrace.txt",
         results,
         header="Ntrace alpha",
         fmt="%.8f"
@@ -459,9 +466,9 @@ def main(logfile):
 
     print("\nAnalysis complete.")
     print("Generated:")
-    print("  msd_all_simulations.png")
-    print("  alpha_vs_Ntrace.png")
-    print("  alpha_vs_Ntrace.txt")
+    print(f"  {GRAPHS_DIR / 'msd_all_simulations.png'}")
+    print(f"  {GRAPHS_DIR / 'alpha_vs_Ntrace.png'}")
+    print(f"  {BASE_DIR / 'alpha_vs_Ntrace.txt'}")
 
 
 # ============================================================
@@ -470,10 +477,14 @@ def main(logfile):
 
 if __name__ == "__main__":
 
-    logfile = (
+    logfile = Path(
         sys.argv[1]
         if len(sys.argv) > 1
         else "log_5_200.lammps"
     )
+
+    # A bare filename is looked up in lammps_data/
+    if not logfile.exists():
+        logfile = DATA_DIR / logfile
 
     main(logfile)

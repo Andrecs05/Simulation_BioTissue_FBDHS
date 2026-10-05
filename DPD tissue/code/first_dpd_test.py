@@ -7,8 +7,13 @@ Usage:
 """
 
 import sys
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "lammps_data"
+GRAPHS_DIR = BASE_DIR / "graphs"
 
 
 def parse_thermo_blocks(path):
@@ -122,10 +127,14 @@ def main(logfile):
     plt.title(r"Tracer MSD with linear regression: MSD $\sim t^{\alpha}$")
     plt.legend(fontsize=9)
     plt.tight_layout()
-    plt.savefig("msd_comparison.png", dpi=150)
+    GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
+    plt.savefig(GRAPHS_DIR / "msd_comparison.png", dpi=150)
     plt.show()
 
 
 if __name__ == "__main__":
-    logfile = sys.argv[1] if len(sys.argv) > 1 else "dpd_run.log"
+    # A bare filename is looked up in lammps_data/
+    logfile = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dpd_run.log")
+    if not logfile.exists():
+        logfile = DATA_DIR / logfile
     main(logfile)
