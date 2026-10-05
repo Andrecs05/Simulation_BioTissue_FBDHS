@@ -1,0 +1,253 @@
+LAMMPS (10 Dec 2025)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread.
+  using 1 OpenMP thread(s) per MPI task
+# ==========================================================================
+# LAMMPS DPD prototype: multi-species dissipative particle dynamics
+# in a 3D periodic box (Groot & Warren 1997 reduced-unit conventions,
+# consistent with the Basan et al. 2011 DPD tissue framework).
+#
+# Particle types (LAMMPS atom types):
+#   type 1 = bulk medium / extracellular-matrix-like DPD fluid  (majority)
+#   type 2 = "particle of interest" A -- slow/heavy tracer
+#            (e.g. mitochondrion-like: larger mass & repulsion radius,
+#             higher friction -> low mobility)
+#   type 3 = "particle of interest" B -- fast/light tracer
+#            (e.g. vesicle-like: smaller mass, lower friction -> high mobility)
+#
+# Types 2 and 3 are dumped at high time resolution so their trajectories
+# can be post-processed in Python (MSD, velocity autocorrelation, Doppler
+# power spectrum S(omega)) independently of the bulk medium.
+# ==========================================================================
+
+# ---------------------- 1. Initialization --------------------------------
+units        lj
+dimension    3
+boundary     p p p
+atom_style   atomic
+neighbor     0.3 bin
+neigh_modify every 1 delay 0 check yes    # DPD particles move fast -> reneighbor often
+comm_modify  vel yes                      # required: dpd force needs ghost-atom velocities
+
+# ---------------------- 2. Simulation box ---------------------------------
+variable     L equal 10.0                 # box edge length (reduced units)
+region       simbox block 0 ${L} 0 ${L} 0 ${L} units box
+region       simbox block 0 10 0 ${L} 0 ${L} units box
+region       simbox block 0 10 0 10 0 ${L} units box
+region       simbox block 0 10 0 10 0 10 units box
+create_box   3 simbox
+Created orthogonal box = (0 0 0) to (10 10 10)
+  1 by 1 by 1 MPI processor grid
+
+# ---------------------- 3. Populate box with particles --------------------
+variable     rho    equal 3.0             # Groot-Warren reference density
+variable     Nbulk  equal round(${rho}*${L}*${L}*${L})
+variable     Nbulk  equal round(3*${L}*${L}*${L})
+variable     Nbulk  equal round(3*10*${L}*${L})
+variable     Nbulk  equal round(3*10*10*${L})
+variable     Nbulk  equal round(3*10*10*10)
+variable     Ntrace equal 60              # tracers per "particle of interest" species
+
+create_atoms 1 random ${Nbulk}  12345 simbox     # bulk medium
+create_atoms 1 random 3000  12345 simbox     
+Created 3000 atoms
+  using lattice units in orthogonal box = (0 0 0) to (10 10 10)
+  create_atoms CPU = 0.001 seconds
+create_atoms 2 random ${Ntrace} 22233 simbox     # organelle "A" (slow/heavy)
+create_atoms 2 random 60 22233 simbox     
+Created 60 atoms
+  using lattice units in orthogonal box = (0 0 0) to (10 10 10)
+  create_atoms CPU = 0.000 seconds
+create_atoms 3 random ${Ntrace} 88711 simbox     # organelle "B" (fast/light)
+create_atoms 3 random 60 88711 simbox     
+Created 60 atoms
+  using lattice units in orthogonal box = (0 0 0) to (10 10 10)
+  create_atoms CPU = 0.000 seconds
+
+group        medium  type 1
+3000 atoms in group medium
+group        orgA    type 2
+60 atoms in group orgA
+group        orgB    type 3
+60 atoms in group orgB
+group        tracers union orgA orgB
+120 atoms in group tracers
+
+# ---------------------- 4. Masses ------------------------------------------
+mass  1  1.0     # medium particle (reference mass)
+mass  2  5.0     # heavier organelle -> lower mobility
+mass  3  1.5     # lighter organelle -> higher mobility
+
+# ---------------------- 5. Pair style: DPD ----------------------------------
+# pair_style dpd T cutoff seed
+variable     T  equal 1.0
+variable     rc equal 1.0
+pair_style   dpd ${T} ${rc} 98765
+pair_style   dpd 1 ${rc} 98765
+pair_style   dpd 1 1 98765
+
+#              A(repulsion)  gamma(friction)  cutoff
+pair_coeff   1 1   25.0          4.5            ${rc}   # medium-medium
+pair_coeff   1 1   25.0          4.5            1   
+pair_coeff   1 2   20.0          3.0            1.3     # medium-orgA (larger reach)
+pair_coeff   1 3   25.0          4.5            1.0     # medium-orgB
+pair_coeff   2 2   15.0          2.0            1.5     # orgA-orgA (soft, allows crowding)
+pair_coeff   2 3   20.0          3.0            1.2     # orgA-orgB cross term
+pair_coeff   3 3   25.0          4.5            1.0     # orgB-orgB
+
+# ---------------------- 6. Time integration ---------------------------------
+timestep     0.01
+fix          integrate all nve
+# LAMMPS docs recommend fix mvv/dpd over nve for better DPD accuracy:
+# unfix      integrate
+# fix        integrate all mvv/dpd
+
+# ---------------------- 7. Diagnostics ---------------------------------------
+compute      msdA orgA msd
+compute      msdB orgB msd
+thermo_style custom step temp press pe ke c_msdA[4] c_msdB[4]
+thermo       500
+
+# Equilibrate the bulk medium before recording tracer trajectories
+run          2000
+Generated 0 of 3 mixed pair_coeff terms from geometric mixing rule
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.8
+  ghost atom cutoff = 1.8
+  binsize = 0.9, bins = 12 12 12
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair dpd, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.096 | 4.096 | 4.096 Mbytes
+   Step          Temp          Press          PotEng         KinEng       c_msdA[4]      c_msdB[4]   
+         0   0              27.084953      8.6392013      0              0              0            
+       500   0.99016636     26.744699      5.1790186      1.4847735      3.2708274      7.5598469    
+      1000   0.99998781     26.867995      5.1591354      1.4995009      7.5602654      15.260368    
+      1500   1.0004894      26.886819      5.155076       1.500253       12.180979      24.32229     
+      2000   0.99082703     27.237752      5.134834       1.4857642      17.215184      31.363936    
+Loop time of 2.72799 on 1 procs for 2000 steps with 3120 atoms
+
+Performance: 633434.137 tau/day, 733.141 timesteps/s, 2.287 Matom-step/s
+100.0% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 1.4076     | 1.4076     | 1.4076     |   0.0 | 51.60
+Neigh   | 1.198      | 1.198      | 1.198      |   0.0 | 43.91
+Comm    | 0.084088   | 0.084088   | 0.084088   |   0.0 |  3.08
+Output  | 0.00028546 | 0.00028546 | 0.00028546 |   0.0 |  0.01
+Modify  | 0.02307    | 0.02307    | 0.02307    |   0.0 |  0.85
+Other   |            | 0.015      |            |       |  0.55
+
+Nlocal:           3120 ave        3120 max        3120 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           4747 ave        4747 max        4747 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:          44756 ave       44756 max       44756 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 44756
+Ave neighs/atom = 14.344872
+Neighbor list builds = 511
+Dangerous builds = 0
+
+# ---------------------- 8. Production run with tracer trajectory dump --------
+reset_timestep 0
+
+# N=1 -> every timestep; lower this (e.g. every 10-50 steps) if you only
+# need a coarser sampling rate for your target Doppler/Nyquist bandwidth.
+dump         traj tracers custom 1 tracer_positions.dump id type x y z vx vy vz
+dump_modify  traj sort id
+
+run          20000
+Generated 0 of 3 mixed pair_coeff terms from geometric mixing rule
+Per MPI rank memory allocation (min/avg/max) = 4.096 | 4.096 | 4.096 Mbytes
+   Step          Temp          Press          PotEng         KinEng       c_msdA[4]      c_msdB[4]   
+         0   0.99082703     26.723279      5.134834       1.4857642      17.215184      31.363936    
+       500   0.99079913     26.845182      5.1406739      1.4857223      21.147655      40.608729    
+      1000   0.99548346     26.986073      5.1255762      1.4927466      26.588263      54.382995    
+      1500   1.0081436      27.314605      5.1584467      1.5117307      28.544232      58.112059    
+      2000   1.0315732      27.245842      5.1488593      1.5468638      31.790951      69.844693    
+      2500   0.99862742     26.640409      5.1447824      1.497461       36.435346      80.430037    
+      3000   1.0016643      26.995607      5.1544896      1.5020149      41.718303      86.026662    
+      3500   1.0120822      26.705762      5.1229606      1.5176367      43.420266      92.24257     
+      4000   0.97732672     26.801875      5.1382391      1.4655202      49.696954      104.74257    
+      4500   1.0108542      27.049515      5.1218939      1.5157953      51.722633      112.71527    
+      5000   1.0083753      26.669067      5.1281925      1.5120781      55.266838      121.56725    
+      5500   1.0354556      26.960481      5.1158179      1.5526856      58.460013      134.71654    
+      6000   0.98868651     26.886051      5.1283798      1.4825544      61.856541      140.18033    
+      6500   0.99088064     26.742831      5.1431542      1.4858446      67.532282      149.50715    
+      7000   0.98403049     26.590371      5.1294039      1.4755726      71.016871      156.36163    
+      7500   1.0385589      26.937171      5.1245709      1.557339       75.516876      168.60812    
+      8000   1.0165258      26.841185      5.1295188      1.5243         76.948503      177.83137    
+      8500   1.0116243      26.833923      5.0992847      1.51695        72.250259      188.29847    
+      9000   0.97941974     26.218992      5.1547073      1.4686587      74.812202      192.69983    
+      9500   0.98434295     26.828625      5.1674939      1.4760412      78.40202       201.60366    
+     10000   1.0001142      26.615034      5.1301088      1.4996905      81.870282      215.16149    
+     10500   0.98662747     26.802451      5.1286749      1.4794669      83.646904      223.64352    
+     11000   1.0128503      26.389046      5.1321836      1.5187885      83.332005      225.13109    
+     11500   1.0194476      26.85044       5.1334298      1.5286813      81.615911      225.99585    
+     12000   1.0081917      26.713848      5.1443519      1.5118028      84.576044      228.30003    
+     12500   1.0312309      26.730048      5.1465604      1.5463505      85.102333      234.59258    
+     13000   0.98572393     26.835757      5.1340711      1.478112       89.835288      246.80542    
+     13500   0.99313041     26.802417      5.1215441      1.4892181      91.258913      250.87982    
+     14000   0.97833989     26.896661      5.1521178      1.4670395      95.425616      263.75712    
+     14500   1.0013983      26.452791      5.1006664      1.5016161      96.33093       269.3542     
+     15000   0.99041813     26.658296      5.1109901      1.485151       92.19247       283.7358     
+     15500   1.008296       26.977188      5.1249508      1.5119592      103.23112      288.46724    
+     16000   0.98776814     26.544188      5.1500962      1.4811773      109.87005      309.56554    
+     16500   0.98884874     26.985862      5.129038       1.4827977      113.64509      314.96775    
+     17000   1.0126714      26.78972       5.1286124      1.5185202      117.41494      320.13981    
+     17500   0.99143494     26.749912      5.1086501      1.4866758      126.44584      331.81181    
+     18000   1.0298168      26.527708      5.1322697      1.5442301      132.20304      330.38968    
+     18500   0.98794239     26.8599        5.1372189      1.4814386      131.87316      342.2523     
+     19000   1.011803       27.113907      5.1165784      1.5172181      139.05033      345.01804    
+     19500   0.99396045     26.846355      5.11124        1.4904628      146.94143      344.68936    
+     20000   1.0096672      26.948771      5.1312711      1.5140154      151.88786      358.91886    
+Loop time of 30.0994 on 1 procs for 20000 steps with 3120 atoms
+
+Performance: 574098.715 tau/day, 664.466 timesteps/s, 2.073 Matom-step/s
+99.5% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 15.182     | 15.182     | 15.182     |   0.0 | 50.44
+Neigh   | 11.963     | 11.963     | 11.963     |   0.0 | 39.75
+Comm    | 0.87727    | 0.87727    | 0.87727    |   0.0 |  2.91
+Output  | 1.6931     | 1.6931     | 1.6931     |   0.0 |  5.63
+Modify  | 0.228      | 0.228      | 0.228      |   0.0 |  0.76
+Other   |            | 0.1557     |            |       |  0.52
+
+Nlocal:           3120 ave        3120 max        3120 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           4719 ave        4719 max        4719 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:          44622 ave       44622 max       44622 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 44622
+Ave neighs/atom = 14.301923
+Neighbor list builds = 5069
+Dangerous builds = 0
+
+# ---------------------- 9. Notes for downstream analysis ---------------------
+# tracer_positions.dump holds per-step positions/velocities of the 2*Ntrace
+# "particles of interest" only. In Python:
+#   1. project onto an arbitrary detection direction q to mimic the DHM
+#      scattering vector:      phase_j(t) = q . r_j(t)
+#   2. sum partial waves        E(t) = sum_j exp(i*phase_j(t))   (homodyne)
+#      or add a fixed reference term for a heterodyne analogue
+#   3. Fourier-transform the field/intensity autocorrelation (Wiener-
+#      Khinchine) to obtain a DPD-generated S(omega), for comparison
+#      against the CTRW/Levy Monte Carlo spectra and DHM bench data.
+#
+# Unit mapping back to physical units follows Basan et al. 2011, Table 2:
+#   t_ref = 1 day, l_ref = 10 um, p_ref = 1000 Pa (rescale as needed for
+#   your organelle speed/persistence-time targets from Nolte 2024, Table 2).
+Total wall time: 0:00:32
