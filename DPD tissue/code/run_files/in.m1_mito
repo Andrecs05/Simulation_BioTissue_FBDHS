@@ -1,0 +1,29 @@
+units         lj
+atom_style    bond
+boundary      p p p
+comm_modify   vel yes cutoff 5.5   # ghost cutoff must exceed half a mitochondrion
+neighbor      0.3 bin
+neigh_modify  every 1 delay 0 check yes
+read_data     m1_mito.data
+
+pair_style    dpd 1.0 1.0 34387
+pair_coeff    1 1 25.0 4.5
+pair_coeff    1 2 40.0 4.5
+pair_coeff    2 2 30.0 4.5
+
+group         cyto type 1
+group         mito type 2
+neigh_modify  exclude molecule/intra mito
+
+velocity      cyto create 1.0 4928459 mom yes rot no
+fix           fluid cyto nve
+fix           bodies mito rigid/small molecule
+
+compute       mchunk mito chunk/atom molecule
+compute       msdM mito msd/chunk mchunk
+fix           msdout mito ave/time 100 1 100 c_msdM[4] file msd_mito.dat mode vector
+
+timestep      0.01
+thermo        1000
+dump          traj all custom 1000 dump.m1 id mol type xu yu zu
+run           200000
