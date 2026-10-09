@@ -36,3 +36,11 @@ def dist_to_point(p, c, BOX):
     d = p - c
     d -= BOX * np.round(d / BOX)                  # minimum image
     return np.linalg.norm(d, axis=1)
+
+def shell(center, R=1.0, s=0.5):
+    """Bead positions on the surface of a sphere on a grid of spacing s."""
+    g = np.arange(-R, R + s, s)
+    X, Y, Z = np.meshgrid(g, g, g, indexing="ij")
+    p = np.c_[X.ravel(), Y.ravel(), Z.ravel()]
+    p = p[np.abs(np.linalg.norm(p, axis=1) - R) <= 0.5 * s]
+    return p + center

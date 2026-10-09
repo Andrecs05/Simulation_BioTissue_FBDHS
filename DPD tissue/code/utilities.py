@@ -1,5 +1,5 @@
 import numpy as np
-from .geometry import capsule, dist_to_segment, sphere, dist_to_point
+from geometry import capsule, dist_to_segment, shell, sphere, dist_to_point
 from pathlib import Path
 
 
@@ -53,16 +53,22 @@ def fit_power_law(t, msd):
 
 class Type:
     """Parameter set for one kind of object (e.g. mitochondria)."""
-    def __init__(self, name, n, geo, r, l=None, s=0.5):
+    def __init__(self, name, n, geo, r, l=None, s=0.5, rel_density=1.0, a_cyto=40.0, a_self=30.0):
         self.name, self.n, self.geo, self.r, self.l, self.s = name, n, geo, r, l, s
         self.positions = []          # sphere: c ; capsule: (c, a)
         self.atom_type = None        # set by Run.add_type
+        self.mass = 3.0 * rel_density * s**3
+        self.a_cyto = a_cyto                     # repulsion against cytoplasm
+        self.a_self = a_self                     # repulsion between two of these
 
     def beads(self, pos):
         if self.geo == "sphere":
             return sphere(pos, self.r, self.s)
-        c, a = pos
-        return capsule(c, a, self.r, self.l, self.s)
+        if self.geo == "capsule":
+            c, a = pos
+            return capsule(c, a, self.r, self.l, self.s)
+        if self.geo == "shell":
+            return shell(pos, self.r, self.s)
 
     def dist(self, p, pos, BOX):
         """Distance from points p to the core of the object (centre or axis segment)."""
@@ -70,6 +76,9 @@ class Type:
             return dist_to_point(p, pos, BOX)
         c, a = pos
         return dist_to_segment(p, c, a, self.l / 2 - self.r, BOX)
+
+    def half_extent(self):
+        return self.r if self.geo == "sphere" else self.l / 2
 
 
 class Run:
@@ -131,8 +140,74 @@ class Run:
             f.write(f"0 {self.BOX[0]} xlo xhi\n0 {self.BOX[1]} ylo yhi\n0 {self.BOX[2]} zlo zhi\n\n")
             f.write("Masses\n\n1 1.0\n")
             for t in self.types:
-                f.write(f"{t.atom_type} 1.0  # {t.name}\n")
+                f.write(f"{t.atom_type} {t.mass:.4f}  # {t.name}\n")
             f.write("\nAtoms # bond\n\n")
             for i, (m, ty, x, img) in enumerate(atoms, start=1):
                 f.write(f"{i} {m} {ty} {x[0]:.5f} {x[1]:.5f} {x[2]:.5f} {img[0]} {img[1]} {img[2]}\n")
         return len(atoms)
+    def write_input_file(self, T=1.0, a_cc=25.0, gamma=4.5, dt=0.01, steps=50000,
+                     dump_every=1000, msd_every=100, thermo_every=1000, seed=34387):
+        org = " ".join(str(t.atom_type) for t in self.types)
+        cutoff = max(t.half_extent() for t in self.types) + 1.5   # must exceed half the largest body
+        L = ["units         lj", "atom_style    bond", "boundary      p p p",
+            f"comm_modify   vel yes cutoff {cutoff:.1f}",
+            "neighbor      0.3 bin", "neigh_modify  every 1 delay 0 check yes",
+            f"read_data     {self.in_name}.data", "",
+            f"pair_style    dpd {T} 1.0 {seed}",
+            f"pair_coeff    1 1 {a_cc} {gamma}"]
+        for i, t in enumerate(self.types):
+            L.append(f"pair_coeff    1 {t.atom_type} {t.a_cyto} {gamma}   # cytoplasm-{t.name}")
+            L.append(f"pair_coeff    {t.atom_type} {t.atom_type} {t.a_self} {gamma}")
+            for u in self.types[i + 1:]:   # two different organelle types: mean of their a_self values
+                L.append(f"pair_coeff    {t.atom_type} {u.atom_type} {(t.a_self + u.a_self) / 2} {gamma}")
+        L += ["", "group         cyto type 1", f"group         org type {org}"]
+        L += [f"group         {t.name} type {t.atom_type}" for t in self.types]
+        L += ["neigh_modify  exclude molecule/intra org", "",
+            f"velocity      cyto create {T} 4928459 mom yes rot no",
+            "fix           fluid cyto nve",
+            "fix           bodies org rigid/small molecule", "",
+            "compute       chunks org chunk/atom molecule",
+            "compute       msd org msd/chunk chunks",
+            f"fix           msdout org ave/time {msd_every} 1 {msd_every} c_msd[4] file msd_org.dat mode vector", "",
+            f"timestep      {dt}", f"thermo        {thermo_every}",
+            f"dump          traj all custom {dump_every} dump.{self.in_name} id mol type x y z ix iy iz",
+            f"run           {steps}", ""]
+        (self.run_dir / f"in.{self.in_name}").write_text("\n".join(L))
+
+def read_type_names(data_path):
+    """Masses section of the data file -> {atom_type: name}, using the '# name' comments."""
+    names, in_masses = {}, False
+    for line in open(data_path):
+        if line.strip() == "Masses":
+            in_masses = True
+            continue
+        if in_masses and line.strip().startswith(("Atoms", "Pair", "Bond")):
+            break
+        if in_masses and "#" in line:
+            k, rest = line.split("#", 1)
+            names[int(k.split()[0])] = rest.strip()
+    return names
+ 
+ 
+def read_dump_com_typed(path):
+    """Like read_dump_com, but also returns mol_ids[n_org] and their atom types[n_org]."""
+    steps, coms = [], []
+    with open(path) as f:
+        while f.readline().startswith("ITEM: TIMESTEP"):
+            steps.append(int(f.readline()))
+            f.readline(); n = int(f.readline())
+            f.readline()
+            box = np.array([np.ptp([float(v) for v in f.readline().split()[:2]]) for _ in range(3)])
+            cols = f.readline().split()[2:]
+            data = np.loadtxt([f.readline() for _ in range(n)])
+            c = {name: k for k, name in enumerate(cols)}
+            if "xu" in c:
+                pos = data[:, [c["xu"], c["yu"], c["zu"]]]
+            else:
+                pos = data[:, [c["x"], c["y"], c["z"]]] + data[:, [c["ix"], c["iy"], c["iz"]]] * box
+            mol = data[:, c["mol"]].astype(int)
+            ids = np.unique(mol[mol > 0])
+            coms.append([pos[mol == m].mean(axis=0) for m in ids])
+            if len(steps) == 1:
+                types = np.array([int(data[mol == m, c["type"]][0]) for m in ids])
+    return np.array(steps), np.array(coms), ids, types
