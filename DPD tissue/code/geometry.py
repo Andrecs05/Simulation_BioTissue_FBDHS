@@ -44,3 +44,9 @@ def shell(center, R=1.0, s=0.5):
     p = np.c_[X.ravel(), Y.ravel(), Z.ravel()]
     p = p[np.abs(np.linalg.norm(p, axis=1) - R) <= 0.5 * s]
     return p + center
+
+def shell_bonds(p, s):
+    """Bonds between shell beads closer than 1.5 s -> i, j (local indices), lengths."""
+    d = np.linalg.norm(p[:, None] - p[None], axis=2)
+    i, j = np.nonzero(np.triu((d > 0) & (d < 1.5 * s)))
+    return i, j, d[i, j]

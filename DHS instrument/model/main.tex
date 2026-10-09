@@ -1,0 +1,831 @@
+% =====================================================================
+%  Theoretical model of the common-path Fresnel-biprism low-coherence
+%  digital holography spectroscopy (FB-DHS) instrument
+%  Proyecto Avanzado 1 -- A. F. Contreras (EAFIT)
+%
+%  Notation follows the course notes "Optica de Fourier" (Goodman-style):
+%  complex amplitude U, object plane (xi, eta), pupil plane (x, y),
+%  image plane (u, v), G = F{g}, h (x) U_g, t_l, P(x,y).
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+% ---------- notation ----------
+\newcommand{\vr}{\mathbf{r}}
+\newcommand{\vq}{\mathbf{q}}
+\newcommand{\shat}{\hat{\mathbf{s}}}
+\newcommand{\FT}{\mathcal{F}}
+\newcommand{\um}{\,\mu\mathrm{m}}
+\newcommand{\nm}{\,\mathrm{nm}}
+\newcommand{\mm}{\,\mathrm{mm}}
+\newcommand{\ee}{e}
+\newcommand{\dd}{d}
+\newcommand{\avg}[1]{\left\langle #1 \right\rangle}
+\newcommand{\rect}{\operatorname{rect}}
+\newcommand{\sinc}{\operatorname{sinc}}
+\newcommand{\step}{\operatorname{step}}
+\newcommand{\comb}{\operatorname{comb}}
+
+\title{Theoretical Model of the Common-Path Fresnel-Biprism\\
+Digital Holography Spectroscopy (FB-DHS) Instrument}
+\author{Andr\'es Felipe Contreras\\ \small Proyecto Avanzado 1 -- EAFIT University}
+\date{Working draft -- \today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document derives the forward optical model that maps the scatterer
+positions of a simulated sample to the fluctuation spectrum measured by a
+common-path Fresnel-biprism digital holography instrument. The instrument
+modeled is the EAFIT implementation built by L\'opez Zapata
+\cite{lopez2026}, which follows the architecture of Goodwin et al.\
+\cite{goodwin2025}. All numerical values refer to the EAFIT setup unless
+stated otherwise. The model is scalar and paraxial, and it uses single
+scattering. It is split into two
+halves: \emph{illumination}, from the source to the field incident on each
+scatterer, and \emph{collection}, from the scattered field to the camera,
+the reconstruction and the spectrum. The objective sample is provolone
+cheese, a passive emulsion of fat globules ($1$--$10\um$) in a casein matrix.
+The notation follows the Fourier-optics course notes.
+\end{abstract}
+
+\tableofcontents
+
+% =====================================================================
+\section{Notation}
+\label{sec:notation}
+
+\subsection{Fourier optics conventions}
+
+The conventions are those of the course notes, which follow Goodman \cite{goodman}.
+
+\begin{itemize}[leftmargin=*]
+  \item A monochromatic field of optical frequency $\nu$ is
+        $u(P,t) = \mathrm{Re}\{U(P)\,\ee^{-i2\pi\nu t}\}$. The complex amplitude
+        $U(P)$ satisfies the Helmholtz equation $(\nabla^2 + k^2)U = 0$, with
+        $k = 2\pi/\lambda$, and the intensity is $I = |U|^2$.
+  \item Two-dimensional Fourier transform and its inverse:
+  \begin{align}
+    G(f_x,f_y) &= \FT\{g(x,y)\} = \iint_{-\infty}^{\infty} g(x,y)\,
+       \ee^{-i2\pi(f_xx + f_yy)}\,\dd x\,\dd y,\\
+    g(x,y) &= \FT^{-1}\{G\} = \iint_{-\infty}^{\infty} G(f_x,f_y)\,\ee^{\,i2\pi(f_xx+f_yy)}\,\dd f_x\,\dd f_y .
+  \end{align}
+  The theorems used below are the shift theorem
+  $\FT\{g(x-a,y-b)\} = G\,\ee^{-i2\pi(f_xa+f_yb)}$, the convolution theorem
+  $\FT\{g\otimes h\} = GH$, and the correlation theorem
+  $\FT\{\iint g(\xi,\eta)\,h^*(\xi - x,\eta - y)\,\dd\xi\,\dd\eta\} = G^*H$
+  (it reduces to $|G|^2$ for the autocorrelation).
+  \item Plane waves are written with direction cosines $(\alpha,\beta,\gamma)$,
+        where $\gamma = \sqrt{1-\alpha^2-\beta^2}$, as
+        $U = A\,\ee^{\,ik(\alpha x + \beta y + \gamma z)}$.
+  \item Fresnel diffraction over a distance $z$:
+  \begin{equation}
+    U(x,y,z) = \frac{\ee^{ikz}}{i\lambda z}\iint U(\xi,\eta,0)\,
+       \ee^{\,i\frac{k}{2z}\left[(x-\xi)^2+(y-\eta)^2\right]}\,\dd\xi\,\dd\eta,
+    \qquad
+    H(f_x,f_y) = \ee^{ikz}\,\ee^{-i\pi\lambda z(f_x^2+f_y^2)}.
+    \label{eq:fresnel}
+  \end{equation}
+  \item Thin element of thickness function $\Delta(x,y)$ and index $n$:
+        $t(x,y) = \ee^{\,ik\Delta_0}\,\ee^{\,ik(n-1)\Delta(x,y)}$. For a thin lens,
+        $t_l(x,y) = \ee^{-i\frac{k}{2f}(x^2+y^2)}$ (constant phase dropped),
+        and the pupil function $P(x,y)$ is 1 inside the aperture and 0 outside.
+  \item Coherent imaging with magnification $M$:
+  \begin{gather}
+    U_i(u,v) = h(u,v)\otimes U_g(u,v),
+    \qquad
+    U_g(\tilde\xi,\tilde\eta) = \frac{1}{|M|}\,U_o\!\left(\frac{\tilde\xi}{M},\frac{\tilde\eta}{M}\right),
+    \label{eq:imaging}\\
+    h(u,v) = \frac{A}{\lambda^2 z_1 z_2}\iint P(x,y)\,
+       \ee^{-i\frac{2\pi}{\lambda z_2}(ux+vy)}\,\dd x\,\dd y,
+    \nonumber
+  \end{gather}
+  where $\tilde\xi = M\xi$, $\tilde\eta = M\eta$ and $U_g$ is the ideal
+  (geometrical-optics) image.
+\end{itemize}
+
+\subsection{Planes and coordinates}
+
+\begin{table}[ht]
+\centering
+\small
+\caption{Planes of the instrument and their coordinates.}
+\label{tab:planes}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Plane & Coordinates & Field \\
+\midrule
+Sample (surface at $z=0$, depth $z>0$) & $(\xi,\eta)$, $\vr = (\xi,\eta,z)$ & $U_o(\xi,\eta)$ \\
+Objective pupil (L1) & $(x,y)$ & $P_1(x,y)$ \\
+Intermediate image & $(u,v)$ & $U_i(u,v)$ \\
+Fourier lens (L2) & $(x',y')$ & $P_2(x',y')$ \\
+Biprism, a distance $d$ before the camera & $(x_B,y_B)$ & $U_B$ \\
+Camera = back focal plane of L2 & $(x_c,y_c)$ & $U_c(x_c,y_c)$, $I_H(x_c,y_c)$ \\
+Reconstruction (lag in image coordinates) & $(\Delta u,\Delta v)$ & $S_+(\Delta u,\Delta v)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two other symbols are needed. The temporal frequency of the intensity
+fluctuations is written $f_t$, to keep it apart from the spatial frequencies
+$(f_x,f_y)$ and from focal lengths. The light spectrum is written as a
+function of the vacuum wavenumber $k$.
+
+% =====================================================================
+\section{Scope and assumptions}
+\label{sec:scope}
+
+\begin{enumerate}[label=(A\arabic*)]
+  \item \textbf{Scalar, paraxial optics.} Polarization is ignored. Free-space
+        propagation between optical elements uses the Fresnel approximation,
+        Eq.~\eqref{eq:fresnel}.
+  \item \textbf{Single scattering.} Each detected photon is scattered once by
+        a globule. Between the surface and that globule, the light travels
+        as the attenuated ballistic beam (first-order Born approximation
+        with extinction). Multiple scattering is left for later work.
+  \item \textbf{Quasi-static sample.} The globules move negligibly during one
+        optical coherence time ($\sim 10^{-13}\,$s). So, for each wavenumber,
+        the field is computed from the instantaneous positions $\vr_j(t)$.
+  \item \textbf{Low temporal coherence, full spatial coherence.} The
+        single-mode fiber gives a spatially coherent beam. Different
+        wavenumbers $k$ are mutually incoherent, so the camera adds
+        intensities over the spectrum.
+  \item \textbf{Static scattering amplitudes.} Globule radii do not change,
+        so each scattering amplitude is a constant. Only the phases depend on
+        time.
+\end{enumerate}
+
+The input to the model is the set of globule positions $\{\vr_j(t_n)\}$ and
+radii $\{a_j\}$ produced by the LAMMPS simulation at the camera frame times.
+The output is the normalized fluctuation power spectrum $\Phi(f_t)$.
+
+% =====================================================================
+\section{The EAFIT instrument}
+\label{sec:params}
+
+The model describes the common-path setup of L\'opez Zapata
+\cite[\S3.1.4--3.1.6, Fig.~3.9]{lopez2026}. The sample sits in a multi-well
+plate and is illuminated from below by the SLD (inverted configuration). The
+backscattered light is folded by a mirror into a horizontal collection arm.
+There, an objective lens (OL) in a $2f$--$2f$ configuration forms a real image
+on the image plane (IP), and a Fourier lens (FL) placed one focal length after
+the IP puts the camera on its back focal plane (FP). The Fresnel biprism (FB)
+sits between FL and the camera. An adjustable aperture before FL sets the beam
+diameter $D$ at the biprism, and Fig.~3.9 of Ref.~\cite{lopez2026} also shows
+an aperture at the IP, which acts as a field stop.
+
+The same architecture was introduced by Goodwin et al.\ \cite{goodwin2025},
+whose provolone measurements are the main external reference. Their values are
+listed for comparison only. Every quantity in Table~\ref{tab:params} stays a
+parameter of the model.
+
+\begin{table}[ht]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Instrument parameters. The EAFIT column is the one used in this
+model. Entries marked $^\dagger$ are inferred here, not stated in the source.}
+\label{tab:params}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Parameter & EAFIT \cite{lopez2026} (this model) & Goodwin et al.\ \cite{goodwin2025} (reference) \\
+\midrule
+Source & Thorlabs SLD850S-A10W & Superlum SLD-381-HP2 \\
+Center wavelength $\lambda_0$ & $850\nm$ & $839.6\nm$ \\
+Bandwidth (FWHM) $\Delta\lambda$ & $60\nm$ & $27.7\nm$ \\
+Power & $\approx 9.3\,$mW (source) & $16.5\,$mW (at sample) \\
+Sample holder & multi-well plate, lit from below & 96-well plate, lit from below \\
+Illumination angle $\psi$ (in air) & oblique in Fig.~3.9, value not stated & $30^\circ$ \\
+Objective (OL) & $f_1 = 75\mm$, $2f$--$2f$, $M=-1$ & not given \\
+Fourier lens (FL) & $f_2 = 200\mm$ & not given \\
+Biprism & apex $170^\circ$ ($\beta = 5^\circ$) & not given \\
+Camera & DMK 41BU02, $p = 3.75\um$ & FLIR BFS-U3-32S4M, $p=3.45\um$ \\
+Hologram ROI & $800\times800$ px (Spirulina data) & $800\times800$ px \\
+Frames, rate & 1400 at $f_s = 0.2\,$Hz ($T\approx7000\,$s) & 3000 at 3 fps \\
+Spectral range $[1/T, f_s/2]$ & $0.14\,$mHz -- $0.1\,$Hz & $0.33\,$mHz -- $1.5\,$Hz \\
+Exposure $T_\mathrm{exp}$ & not stated for provolone & $\le 300\,$ms \\
+Coherence length $l_c$, Eq.~\eqref{eq:lc} & $5.3\um$ & $11.2\um$ \\
+Fringe period $\Lambda$, Eq.~\eqref{eq:biprism} & $9.6\um \approx 2.6\,p^\dagger$ & $\approx 3p$ \\
+Field of view (rule of nine) & $\approx 5\mm^\dagger$ & $\approx 2\mm$ (beam profile) \\
+Spectrum observable & $|\FT_t\{S_+\}|^2$ (field) & $|S_+|^2$ fluctuations$^\dagger$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Sample.}
+Fat volume fraction $\phi \approx 0.3$ (USDA composition). Refractive indices
+at $\approx 840\nm$: fat $n_p \approx 1.455$, casein matrix
+$n_m \approx 1.392$ \cite{stocker2016}, so the relative index is
+$m = n_p/n_m \approx 1.045$. Globule radii range over $a \approx 0.5$--$5\um$.
+
+% =====================================================================
+\section{Part I: Illumination (source to scatterer)}
+\label{sec:illum}
+
+\subsection{Source spectrum and temporal coherence}
+
+The source field is a superposition of mutually incoherent monochromatic
+components $u(P,t) = \mathrm{Re}\{U(P;k)\,\ee^{-i2\pi\nu t}\}$, each with vacuum
+wavenumber $k = 2\pi\nu/c$ and weight $S(k)$. The SLD spectrum is modeled as a
+Gaussian,
+\begin{equation}
+  S(k) = \frac{1}{\sqrt{2\pi}\,\sigma_k}
+         \exp\!\left[-\frac{(k-k_0)^2}{2\sigma_k^2}\right],
+  \qquad
+  \sigma_k = \frac{\Delta k}{2\sqrt{2\ln 2}},
+  \qquad
+  \Delta k = \frac{2\pi\,\Delta\lambda}{\lambda_0^2},
+  \label{eq:spectrum}
+\end{equation}
+normalized so that $\int S\,\dd k = 1$. Two fields that reach the camera with
+an optical path difference $\Delta L$ interfere with the weight given by the
+complex degree of temporal coherence, which is the Fourier transform of the
+spectrum (Wiener--Khinchin):
+\begin{equation}
+  \gamma(\Delta L) = \int S(k)\,\ee^{\,ik\Delta L}\,\dd k
+  = \exp\!\left(-\frac{\sigma_k^2\,\Delta L^2}{2}\right)\ee^{\,ik_0\Delta L}.
+  \label{eq:gamma}
+\end{equation}
+The envelope $|\gamma|$ falls to one half at $|\Delta L| = l_c$, where
+\begin{equation}
+  l_c = \frac{\sqrt{2\ln 2}}{\sigma_k} = \frac{2\ln 2}{\pi}\,\frac{\lambda_0^2}{\Delta\lambda}.
+  \label{eq:lc}
+\end{equation}
+For the EAFIT source this gives $\sigma_k \approx 0.22\um^{-1}$ and
+$l_c \approx 5.3\um$ (the Goodwin source gives $11.2\um$). Ref.~\cite{lopez2026}
+quotes $\lambda_0^2/\Delta\lambda \approx 12\um$, which is a different
+convention for the same quantity.
+
+\paragraph{Spectral discretization.}
+In the simulation, $S(k)$ is sampled at $N_k$ points with spacing $\delta k$
+over $k_0 \pm 3\sigma_k$. The sampled coherence function repeats with period
+$2\pi/\delta k$ in $\Delta L$, so this period must exceed the largest path
+difference in the sample, $\Delta L_\mathrm{max} \approx 2n_m z_\mathrm{max}$:
+\begin{equation}
+  \delta k < \frac{2\pi}{2\,\Delta L_\mathrm{max}}, \qquad
+  N_k \approx \frac{6\sigma_k}{\delta k}.
+  \label{eq:Nk}
+\end{equation}
+For a slab $z_\mathrm{max} = 20\um$, $\Delta L_\mathrm{max}\approx 56\um$,
+which gives $N_k \approx 24$ for the EAFIT source.
+
+\subsection{Beam at the sample}
+
+The SLD output reaches the sample as a Gaussian beam with waist $w$. The
+beam size is not stated in Ref.~\cite{lopez2026}. The field of view is set by
+whichever is smaller: the beam, or the field stop at the IP (about $5\mm$
+under the rule of nine, Section~\ref{sec:collect}). For $w \sim 1\mm$ the
+Rayleigh range $z_R = \pi w^2/\lambda$ is of order metres, much larger than the
+sample depth. So, inside the sample,
+the illumination is a plane wave with a Gaussian transverse envelope. With
+direction cosines $(\alpha_t,\beta_t,\gamma_t)$ in the medium,
+\begin{equation}
+  U_\mathrm{inc}^{(0)}(\xi,\eta,z;k) = \sqrt{S(k)}\,A\,
+     \exp\!\left(-\frac{\xi^2+\eta^2}{w^2}\right)
+     \exp\!\left[\,ik\,n_m(\alpha_t\xi + \beta_t\eta + \gamma_t z)\right].
+  \label{eq:beam}
+\end{equation}
+
+\subsection{Geometry and refraction}
+
+In the EAFIT setup the collection axis is the sample normal: the fold mirror
+under the plate sends the vertically backscattered light into the horizontal
+collection arm. Fig.~3.9 of Ref.~\cite{lopez2026} draws the illumination
+reaching the plate obliquely from below, but the angle is not stated, so it is
+kept as a parameter $\psi$ (in air, in the $\xi z$ plane). The plate bottom is
+a parallel slab, so it does not change the angle inside the sample, and
+Snell's law gives the refracted angle $\theta_t$:
+\begin{equation}
+  \sin\theta_t = \frac{\sin\psi}{n_m},
+  \qquad
+  (\alpha_t,\beta_t,\gamma_t) = (\sin\theta_t,\,0,\,\cos\theta_t).
+  \label{eq:snell}
+\end{equation}
+For $\psi = 30^\circ$ (Goodwin's value), $\theta_t \approx 21.1^\circ$. For
+on-axis illumination, $\theta_t = 0$. The Fresnel transmission losses at the
+plate bottom only rescale $A$ and are ignored.
+
+The light collected by the objective leaves the sample with direction cosines
+close to $(0,0,-1)$. Writing $\shat_t = (\alpha_t,\beta_t,\gamma_t)$ and
+$\shat_\mathrm{out} = (0,0,-1)$, the scattering vector is
+\begin{equation}
+  \vq = k\,n_m\,(\shat_t - \shat_\mathrm{out}) = k\,n_m\,(\sin\theta_t,\;0,\;1+\cos\theta_t),
+  \qquad
+  |\vq| = 2k\,n_m\cos(\theta_t/2).
+  \label{eq:q}
+\end{equation}
+At $\lambda_0 = 850\nm$, $|\vq| = 4\pi n_m/\lambda_0 \approx 20.6\um^{-1}$ for
+$\psi = 0$ and $|\vq| \approx 20.2\um^{-1}$ for $\psi = 30^\circ$. The
+difference is below $2\%$, so $q \approx 20.5\um^{-1}$ is used for estimates.
+The angle matters more for the direction of $\vq$, which sets the tilt of the
+coherence gate (Section~\ref{sec:collect}). The in-medium scattering angle is
+$\theta_s = \pi - \theta_t$.
+
+\subsection{Ballistic attenuation}
+
+Under (A2), the beam reaching a globule at depth $z$ has travelled a path
+$z/\cos\theta_t$ through the turbid medium, and the scattered field returns
+along a path $z$. The ballistic amplitude decays as
+\begin{equation}
+  T(z) = \exp\!\left[-\frac{\mu_t z}{2}\left(\frac{1}{\cos\theta_t} + 1\right)\right],
+  \qquad \mu_t = \mu_s + \mu_a \approx \mu_s,
+  \label{eq:atten}
+\end{equation}
+since absorption is negligible in the near infrared. The scattering
+coefficient follows from the number density
+$n_v = \phi/(\tfrac{4}{3}\pi a^3)$ and the scattering efficiency $Q_s$:
+\begin{equation}
+  \mu_s = n_v\,\pi a^2 Q_s = \frac{3\phi\,Q_s}{4a}.
+\end{equation}
+For $m - 1 \ll 1$ and $ka \gg 1$, the anomalous-diffraction approximation
+gives
+\begin{equation}
+  Q_s(\varrho) = 2 - \frac{4}{\varrho}\sin\varrho + \frac{4}{\varrho^2}(1-\cos\varrho),
+  \qquad \varrho = 2x_s(m-1), \quad x_s = k\,n_m a,
+\end{equation}
+where $x_s$ is the size parameter. For $a = 2\um$, $x_s \approx 21$,
+$\varrho \approx 1.9$, $Q_s \approx 1.45$, and $\mu_s \approx 0.16\um^{-1}$, so
+the scattering mean free path is $\ell_s \approx 6\um$. At $\phi \approx 0.3$
+the globules are densely packed, and a hard-sphere structure factor
+(Percus--Yevick) would lower this value. It should be treated as an upper
+bound.
+
+\paragraph{Consequence for the sample size.}
+Single scattering is only self-consistent within the top one or two $\ell_s$.
+A slab of depth $z_\mathrm{max} \approx 15$--$20\um$ under a free surface
+contains essentially all of the signal ($T^2 < 10^{-2}$ beyond that depth).
+
+\subsection{Result of Part I: field incident on globule \texorpdfstring{$j$}{j}}
+
+Combining Eqs.~\eqref{eq:beam} and \eqref{eq:atten}, the field that
+illuminates globule $j$, at $\vr_j = (\xi_j,\eta_j,z_j)$, is
+\begin{equation}
+  \boxed{\;
+  U_\mathrm{inc}(\vr_j;k,t) = \sqrt{S(k)}\;A\;
+     \ee^{-(\xi_j^2+\eta_j^2)/w^2}\;
+     \ee^{-\mu_t z_j/(2\cos\theta_t)}\;
+     \ee^{\,ik\,n_m\,\shat_t\cdot\vr_j(t)}
+  \;}
+  \label{eq:Einc}
+\end{equation}
+The last factor is the illumination half of the Doppler phase. The
+collection half, $-k\,n_m\,\shat_\mathrm{out}\cdot\vr_j = k\,n_m z_j$, is added in
+Part~II, and together the two halves make $\vq\cdot\vr_j$.
+
+% =====================================================================
+\section{Scattering by a single globule}
+\label{sec:scatter}
+
+Globule $j$ re-radiates the incident field with the far-field amplitude
+$S_1(\theta_s; a_j, m, x_s)$ from Mie theory (scalar version: the average of
+the two polarization amplitudes). The size parameter is
+$x_s \approx 10\,a[\mu\mathrm{m}]$, so the globules are in the Mie regime. The
+Rayleigh--Gans--Debye approximation needs $\varrho \ll 1$, which only holds
+for $a \lesssim 0.5\um$. In practice, a table $a_s(a) \equiv S_1(\theta_s; a)$
+is computed once over the radius distribution at the instrument's $\theta_s$.
+
+Seen from the objective, which images the plane $z=0$, each globule acts as a
+point source on the sample plane, with complex strength
+\begin{equation}
+  c_j(k,t) = a_s(a_j)\;T(z_j)\;\ee^{-(\xi_j^2+\eta_j^2)/w^2}\;
+             \ee^{\,i\vq\cdot\vr_j(t)} .
+  \label{eq:cj}
+\end{equation}
+Common phase factors that cancel in every interference term have been
+dropped. The object field is then
+\begin{equation}
+  U_o(\xi,\eta;k,t) = \sum_j c_j(k,t)\,\delta(\xi-\xi_j,\,\eta-\eta_j).
+  \label{eq:Uo}
+\end{equation}
+Because $|a_s|^2$ grows steeply with radius, the largest globules dominate the
+signal. The defocus of globules below $z=0$ is neglected; this holds while
+$z_\mathrm{max}$ is smaller than the depth of field $\lambda/\mathrm{NA}^2$.
+
+% =====================================================================
+\section{Part II: Collection (scatterer to camera)}
+\label{sec:collect}
+
+\subsection{Coherent imaging by the objective}
+
+Inserting Eq.~\eqref{eq:Uo} into the imaging relation Eq.~\eqref{eq:imaging},
+and using $\delta(\tilde\xi/M - \xi_j) = |M|\,\delta(\tilde\xi - M\xi_j)$, the
+ideal image is a set of point sources at $(M\xi_j, M\eta_j)$, and the image
+field is a sum of shifted impulse responses:
+\begin{gather}
+  U_i(u,v;k,t) = |M|\sum_j c_j(k,t)\;h_1(u - M\xi_j,\; v - M\eta_j),
+  \label{eq:Ui}\\
+  h_1(u,v) = \frac{A}{\lambda^2 z_1 z_2}\iint P_1(x,y)\,
+       \ee^{-i\frac{2\pi}{\lambda z_2}(ux+vy)}\,\dd x\,\dd y .
+  \nonumber
+\end{gather}
+The width of $h_1$ referred to the sample is the resolution cell,
+$\delta \approx \lambda/(2\,\mathrm{NA})$. This is the same pupil model as
+Ref.~\cite[Eqs.~2.7--2.10]{lopez2026}, where the coherent transfer function is
+the pupil with cutoff $f_c$. For the EAFIT objective ($f_1 = 75\mm$ in
+$2f$--$2f$), $z_1 = z_2 = 150\mm$ and $M = -1$. The lens diameter is not
+stated. For a 1-inch lens, $\mathrm{NA} \approx 12.7/150 \approx 0.085$ and
+$\delta \approx 5\um$ (inferred).
+
+\paragraph{Field stop at the image plane.}
+The aperture drawn at the IP in Fig.~3.9 of Ref.~\cite{lopez2026} multiplies
+the image by its pupil function, $U_i \to U_i\,P_\mathrm{IP}(u,v)$. Its diameter
+$D_\mathrm{IP}$ sets the field of view at the sample, $L = D_\mathrm{IP}/|M|$
+(unless the illumination beam is smaller), and therefore the speckle size on
+the camera.
+
+\subsection{Fourier lens}
+
+The intermediate image sits at the front focal plane of L2. Using the
+lens-as-Fourier-transform result with $d = f_2$ (and ignoring vignetting by
+$P_2$), the field on the back focal plane is an exact Fourier transform:
+\begin{equation}
+  U_F(x_c,y_c;k,t) = \frac{1}{i\lambda f_2}\,G_i\!\left(\frac{x_c}{\lambda f_2},\frac{y_c}{\lambda f_2}\right),
+  \qquad
+  G_i(f_u,f_v) = \FT\{U_i(u,v)\}.
+  \label{eq:UF}
+\end{equation}
+With Eq.~\eqref{eq:Ui} and the shift and convolution theorems, the Fourier
+field is the scaled pupil, filled with a random sum of plane-wave phases:
+\begin{equation}
+  G_i(f_u,f_v) = |M|\,H_1(f_u,f_v)\sum_j c_j\,
+     \ee^{-i2\pi M(f_u\xi_j + f_v\eta_j)},
+  \label{eq:Gi}
+\end{equation}
+with $H_1 = \FT\{h_1\} \propto P_1(-\lambda z_2 f_u,\,-\lambda z_2 f_v)$.
+Two length scales appear on the camera. The first is the diameter $D_F$ of the
+illuminated disc. The objective alone would give $2f_2\,\mathrm{NA}/|M|
+\approx 34\mm$, but the adjustable aperture before FL limits the beam to a
+smaller $D$, so $D_F = D$ in practice. The second is the speckle grain inside
+that disc,
+\begin{equation}
+  s \approx \frac{\lambda f_2}{D_\mathrm{IP}} = \frac{\lambda f_2}{|M|L},
+  \label{eq:speckle}
+\end{equation}
+set by the field of view, because the phases in the sum vary on the scale
+$\Delta f_u \sim 1/(|M|L)$.
+
+\subsection{Fresnel biprism: shear and carrier}
+
+The biprism has apex angle $\alpha_B$, base angle $\beta = (\pi-\alpha_B)/2$
+and index $n_g$. Its apex line is perpendicular to the unit vector
+$\hat{\mathbf{e}}$, which is rotated by $\approx 45^\circ$ with respect to the
+pixel grid. Let $x_B$ be the coordinate along $\hat{\mathbf{e}}$. The thickness
+is largest at the apex, $\Delta(x_B) = \Delta_0 - \beta|x_B|$, so the thin-element
+transmittance is
+\begin{align}
+  t_B(x_B,y_B) &= \ee^{\,ik n_g\Delta_0}\,\ee^{-ik(n_g-1)\beta\,|x_B|}
+  \nonumber\\
+  &= \ee^{\,ikn_g\Delta_0}\left[\step(x_B)\,\ee^{-ik\theta x_B}
+    + \step(-x_B)\,\ee^{\,ik\theta x_B}\right],
+  \qquad \theta = (n_g-1)\beta .
+  \label{eq:tB}
+\end{align}
+Each half acts as a prism that tilts its part of the beam by $\theta$ toward
+the axis; in direction cosines, $\alpha = \mp\theta$ for $x_B \gtrless 0$.
+
+\paragraph{Propagation to the camera.}
+The biprism sits a distance $d$ before the back focal plane of L2. Let
+$U_B(x_B,y_B)$ be the field arriving at it, so that propagating $U_B$ by $d$
+without the biprism would give $U_F$. In terms of the Fresnel transfer
+function, a linear phase $\ee^{\mp ik\theta x_B}$ shifts the angular spectrum by
+$\mp\theta/\lambda$, and after a distance $d$ this becomes a lateral shift
+$\mp\theta d$ plus the same linear phase (shift theorem applied to
+Eq.~\eqref{eq:fresnel}). Writing $U_{F\pm}$ for the field that each half of the
+biprism aperture alone would produce at the camera,
+\begin{gather}
+  U_c(x_c,y_c) = U_{F+}(x_c+\eta_s,\,y_c)\,\ee^{-iK x_c/2}
+               + U_{F-}(x_c-\eta_s,\,y_c)\,\ee^{\,iK x_c/2},
+  \label{eq:biprism}\\
+  K = 2k\theta = \frac{2\pi}{\Lambda},
+  \qquad \Lambda = \frac{\lambda}{2\theta},
+  \qquad \eta_s = \theta d,
+  \nonumber
+\end{gather}
+where $x_c$ is now measured along $\hat{\mathbf{e}}$ and a constant phase
+$\ee^{-i\pi\lambda d(\theta/\lambda)^2}$ has been dropped. This is Eq.~(4) of
+Ref.~\cite{goodwin2025}, written here as $\eta_s$ for the shear to avoid
+confusion with the sample coordinate $\eta$. The sign of $K$ is opposite to
+Ref.~\cite{goodwin2025} because of the $\ee^{-i2\pi\nu t}$ convention. This only
+changes which sideband is labelled $+1$.
+
+\paragraph{Half-plane approximation.}
+If the biprism is close enough to L2 that the beam from each image point
+still covers the full aperture, $U_{F\pm}$ is simply $U_F$ restricted to one
+half of the disc:
+\begin{equation}
+  U_{F\pm}(x_c,y_c) \approx \step(\pm x_c)\,U_F(x_c,y_c).
+\end{equation}
+This assumes that the image field of view is small compared with the
+aperture at the biprism. Diffraction at the apex line is neglected.
+
+\paragraph{Overlap geometry and the EAFIT numbers.}
+With $\eta_s = D/4$, the two half-discs land on top of each other over a
+width $W \approx D/2$, which is the diamond-shaped region of
+Refs.~\cite{goodwin2025,lopez2026} (their Eqs.~(2) and (2.23)--(2.24)):
+$W \approx D/2$ at the distance $d \approx D/(4\theta)$. The design rule is that
+$W$ matches the sensor size $C$ and $d$ matches the distance to the camera.
+For the EAFIT values (inferred where marked):
+\begin{itemize}[leftmargin=*]
+  \item Biprism: $\beta = 5^\circ$ and $n_g \approx 1.51$ (BK7 at $850\nm$$^\dagger$)
+        give $\theta \approx 44.5\,$mrad and $\Lambda = \lambda/(2\theta)
+        \approx 9.6\um \approx 2.6\,p$, slightly under the rule-of-nine value
+        of $3p$ but still above the Nyquist limit of $2p$.
+  \item Field of view: the rule of nine, $s = 9p$ in Eq.~\eqref{eq:speckle},
+        gives $D_\mathrm{IP} = \lambda f_2/(9p) \approx 5\mm$, so
+        $L \approx 5\mm$ at the sample.
+  \item Beam at the biprism: the DMK 41BU02 sensor is $1280\times960$ px
+        $\approx 4.8\times3.6\mm$$^\dagger$, so $W \approx C$ asks for
+        $D \approx 7$--$10\mm$ and $d \approx 40$--$55\mm$$^\dagger$.
+  \item Reconstruction: with an $N = 800$ ROI, the reconstruction pixel is
+        $\lambda f_2/(Np) \approx 57\um$, the sideband centre is
+        $Np/\Lambda \approx 314$ px from the zero order, and the sideband
+        (an autocorrelation, so twice the field of view wide) spans about
+        $\pm 88$ px around it.
+\end{itemize}
+
+\paragraph{Shear as a scattering-vector offset.}
+$U_{F+}(x_c+\eta_s)$ and $U_{F-}(x_c-\eta_s)$ sample $G_i$ at spatial
+frequencies that differ by $2\eta_s/(\lambda f_2)$. Referred to the sample,
+the two interfering fields come from slightly different scattering vectors,
+$\vq_\pm = \vq \pm \tfrac{1}{2}\Delta\vq_\perp$, with
+$|\Delta\vq_\perp| = k\,|M|\,2\eta_s/f_2 \approx k\,\mathrm{NA}$.
+
+\subsection{Low-coherence hologram}
+
+For each wavenumber, the camera records $|U_c|^2$. Under (A4), the hologram
+is the spectral average
+\begin{align}
+  I_H(x_c,y_c,t) &= \int S(k)\,|U_c(x_c,y_c;k,t)|^2\,\dd k
+  \nonumber\\
+  &= \underbrace{\avg{|U_{F+}|^2 + |U_{F-}|^2}_k}_{\text{zero order}}
+  + \underbrace{\avg{U_{F+}(x_c+\eta_s)\,U_{F-}^*(x_c-\eta_s)}_k\,\ee^{-iKx_c}}_{+1\ \text{sideband}}
+  + \text{c.c.},
+  \label{eq:hologram}
+\end{align}
+where $\avg{\cdot}_k$ denotes the $S(k)$-weighted integral. Inserting
+Eqs.~\eqref{eq:cj} and \eqref{eq:Gi} into the cross term, each globule pair
+$(j,j')$ carries the factor $\ee^{\,i\vq\cdot(\vr_j-\vr_{j'})}$, in which $\vq$ is
+proportional to $k$. The $k$ integral turns it into $\gamma(\Delta L_{jj'})$,
+with the single-scattering optical path difference
+\begin{equation}
+  \Delta L_{jj'} = \frac{1}{k}\,\vq\cdot(\vr_j - \vr_{j'}).
+\end{equation}
+So a pair contributes to the sideband only if
+\begin{equation}
+  \left|\hat{\vq}\cdot(\vr_j - \vr_{j'})\right| \lesssim \frac{l_c}{2n_m\cos(\theta_t/2)}.
+  \label{eq:gate}
+\end{equation}
+This is the ``stacked'' coherence gate of Ref.~\cite{goodwin2025}. For the
+EAFIT source it is a slab only about $1.9\um$ thick along $\hat{\vq}$
+(about $4\um$ for Goodwin's source), tilted by $\theta_t/2$ from the surface. The reconstruction adds all such
+slabs incoherently, weighted by $T^2(z)$.
+
+\paragraph{Chromatic scaling.}
+For a fixed camera position, the spatial frequency $x_c/(\lambda f_2)$
+depends on $\lambda$, so speckle at the edge of the disc blurs radially over
+the bandwidth. The carrier also scales, since $\Lambda \propto \lambda$.
+However, the sideband position in the reconstruction, $\lambda f_2/\Lambda =
+2\theta f_2$, does not depend on $\lambda$, and neither does the
+reconstruction coordinate. A per-$k$ simulation therefore has to use the
+correct $\lambda$ in Eqs.~\eqref{eq:UF} and \eqref{eq:biprism}, but all
+wavenumbers reconstruct onto the same grid.
+
+\subsection{Camera sampling and exposure}
+
+The camera samples $I_H$ with pixel pitch $p$ on an $N\times N$ grid. Frame
+$n$ integrates over each pixel and over the exposure:
+\begin{equation}
+  I_n(x_c,y_c) = \left[\bar I_{H,n} \otimes \rect\!\left(\frac{x_c}{p}\right)\rect\!\left(\frac{y_c}{p}\right)\right]
+     \frac{1}{p^2}\comb\!\left(\frac{x_c}{p}\right)\comb\!\left(\frac{y_c}{p}\right),
+  \label{eq:camera}
+\end{equation}
+where $\bar I_{H,n}(x_c,y_c) = \int_{t_n}^{t_n+T_\mathrm{exp}} I_H(x_c,y_c,t)\,\dd t$
+and $t_n = n/f_s$. By the convolution theorem, the pixel integration
+multiplies the reconstruction by $\sinc(p f_x)\sinc(p f_y)$, and the comb
+replicates it with period $1/p$ (the sampling theorem). In time, the exposure
+multiplies the fluctuation spectrum by $\sinc^2(f_tT_\mathrm{exp})$, and,
+together with aliasing above the Nyquist frequency $f_s/2$, produces the
+``strobe'' floor of Ref.~\cite{goodwin2025}. Shot noise and quantization
+are then added. With the EAFIT protocol ($f_s = 0.2\,$Hz), the exposure is much
+shorter than the 5 s frame period, so every dynamics faster than $0.1\,$Hz
+aliases into the measured band instead of being averaged out. In the
+simulation, the exposure integral needs LAMMPS positions at several sub-steps
+within each exposure, and the run must cover the full $T \approx 7000\,$s.
+
+\subsection{Reconstruction}
+
+Because the camera sits on the Fourier plane, one 2D Fourier transform of
+each frame returns to the image domain. Taking the transform of
+Eq.~\eqref{eq:hologram} with respect to $(x_c,y_c)$ and evaluating it at
+$(f_x,f_y) = (\Delta u,\Delta v)/(\lambda f_2)$, the zero order lands at the
+center and the two sidebands land at
+$\Delta u = \pm\lambda f_2/\Lambda = \pm 2\theta f_2$ along $\hat{\mathbf{e}}$.
+A window $W_+$ isolates one sideband:
+\begin{equation}
+  S_+(\Delta u,\Delta v; t_n) = W_+(\Delta u,\Delta v)\cdot\FT\{I_n(x_c,y_c)\}\Big|_{f_x=\Delta u/\lambda f_2,\,f_y=\Delta v/\lambda f_2}.
+\end{equation}
+By the correlation theorem, the transform of the product
+$U_{F+}U_{F-}^*$ is the cross-correlation of the two half-aperture images
+$U_{i\pm} = \FT^{-1}\{U_{F\pm}\}$:
+\begin{equation}
+  S_+(\Delta u,\Delta v,t) \propto \iint U_{i+}(u,v,t)\,U_{i-}^*(u-\Delta u,\,v-\Delta v,\,t)\,\dd u\,\dd v .
+  \label{eq:Scorr}
+\end{equation}
+This is the autocorrelation of the image of Ref.~\cite{goodwin2025}, Eq.~(6).
+Each $U_{i\pm}$ is the image formed through one half of the pupil, so it has
+the form of Eq.~\eqref{eq:Ui} with $h_1$ replaced by the half-pupil impulse
+response $h_\pm$ (pupil $P_1\,\step(\pm x)$), and with the shear phase of
+$\vq_\pm$. Substituting gives the sideband in terms of globules:
+\begin{equation}
+  \boxed{
+  \begin{aligned}
+  S_+(\Delta u,\Delta v,t) \approx \sum_{j,j'} &a_s(a_j)\,a_s^*(a_{j'})\,T_jT_{j'}\;
+     C\!\left(\Delta u - M(\xi_j - \xi_{j'}),\;\Delta v - M(\eta_j-\eta_{j'})\right)\\
+     &\times\left|\gamma(\Delta L_{jj'})\right|\;
+     \ee^{\,i\left[\vq_+\cdot\vr_j(t) - \vq_-\cdot\vr_{j'}(t)\right]}
+  \end{aligned}}
+  \label{eq:Splus}
+\end{equation}
+where $C(u,v) = \iint h_+(u',v')\,h_-^*(u'-u,v'-v)\,\dd u'\,\dd v'$ is the
+cross-correlation of the two half-pupil impulse responses. Each
+reconstruction pixel is therefore a sum over globule pairs separated laterally
+by $\approx(\Delta u,\Delta v)/M$ and lying in the same coherence slab. Its
+phase follows the \emph{relative} motion of the pair:
+\begin{equation}
+  \vq_+\cdot\vr_j - \vq_-\cdot\vr_{j'} =
+  \vq\cdot(\vr_j - \vr_{j'}) + \tfrac{1}{2}\Delta\vq_\perp\cdot(\vr_j + \vr_{j'}).
+\end{equation}
+A common axial displacement cancels exactly. A common lateral drift only
+survives through the small offset $\Delta\vq_\perp \sim k\,\mathrm{NA}$. This
+is the origin of the instrument's vibration immunity.
+
+\paragraph{Reduced model.}
+Eq.~\eqref{eq:Splus} can be evaluated directly from the LAMMPS positions,
+without simulating the hologram. The full chain
+(Eqs.~\eqref{eq:Ui}--\eqref{eq:camera}) is only needed to study pixel,
+exposure, noise and aliasing effects.
+
+% =====================================================================
+\section{Fluctuation spectrum}
+\label{sec:spectrum}
+
+\subsection{Observable}
+
+The EAFIT processing \cite[Eqs.~2.33--2.36 and \S3.1.6]{lopez2026} takes the
+temporal FFT of the \emph{complex} reconstructed field $S_+$ at each pixel,
+which by the Wiener--Khinchin theorem is the Fourier transform of the field
+autocorrelation
+\begin{equation}
+  G_1(\Delta u,\Delta v,\tau) = \avg{S_+(\Delta u,\Delta v,t)\,S_+^*(\Delta u,\Delta v,t+\tau)}_t .
+\end{equation}
+The per-pixel power spectral density is summed over a region $\Omega$ of the
+sideband and normalized by its mean over frequency:
+\begin{equation}
+  \Phi_\Omega(f_t) = \frac{\displaystyle\sum_{(\Delta u,\Delta v)\in\Omega}
+          \left|\FT_t\{S_+(\Delta u,\Delta v,t)\}(f_t)\right|^2}
+         {\displaystyle\avg{\sum_{(\Delta u,\Delta v)\in\Omega}
+          \left|\FT_t\{S_+\}\right|^2}_{f_t}},
+  \qquad f_t \in \left[\tfrac{1}{T},\ \tfrac{f_s}{2}\right],
+  \label{eq:psd}
+\end{equation}
+where $\FT_t$ is the one-dimensional Fourier transform over time and $T$ is
+the total acquisition time. Goodwin et al.\ and Nolte et al.\
+\cite{goodwin2025,nolte2011} instead take the spectrum of the reconstructed
+intensity $|S_+|^2$. The two choices give different knee frequencies, as shown
+next.
+
+\subsection{Brownian globules}
+
+For a globule with diffusion coefficient $D_j$, the phase increment over a lag
+$\tau$ is Gaussian with $\avg{(\vq\cdot\Delta\vr_j)^2} = 2q^2D_j\tau$. This is
+the single-scattering limit of Ref.~\cite[Eq.~2.37]{lopez2026}. For independent
+globules, the phase of a pair term in Eq.~\eqref{eq:Splus} depends on the
+relative displacement, and its field correlation is
+\begin{equation}
+  g_1^{(jj')}(\tau) = \exp\!\left[-q^2(D_j + D_{j'})|\tau|\right].
+\end{equation}
+Terms from different pairs are uncorrelated, so the field autocorrelation of a
+pixel is the weighted sum
+\begin{equation}
+  G_1(\tau) = \sum_{j,j'} |w_{jj'}|^2\,\ee^{-q^2(D_j + D_{j'})|\tau|},
+  \qquad
+  w_{jj'} = a_s(a_j)\,a_s^*(a_{j'})\,T_jT_{j'}\,C(\cdot)\,|\gamma(\Delta L_{jj'})|.
+\end{equation}
+\paragraph{Field spectrum (EAFIT observable).}
+Each exponential transforms into a Lorentzian,
+$\FT_t\{\ee^{-\Gamma|\tau|}\} = 2\Gamma/[\Gamma^2 + (2\pi f_t)^2]$, with its knee
+at $2\pi f_t = \Gamma$. For equal globules, $\Gamma = 2q^2D$ and
+\begin{equation}
+  \boxed{\; f_{t,\mathrm{knee}} = \frac{q^2D}{\pi} \qquad \text{(spectrum of the field } S_+\text{)} \;}
+  \label{eq:knee}
+\end{equation}
+This result does not need any assumption about the statistics of $S_+$.
+
+\paragraph{Intensity spectrum (Goodwin/Nolte observable).}
+If the spectrum is taken of $|S_+|^2$ instead, the result depends on how many
+pairs a pixel sums. When it sums many independent pairs (the field of view
+holds many resolution cells), $S_+$ is a circular Gaussian variable, the
+Siegert relation gives $\avg{I(t)I(t+\tau)}/\avg{I}^2 - 1 = |G_1(\tau)/G_1(0)|^2$,
+and the knee doubles to $2q^2D/\pi$. When a single product $U_aU_b^*$
+dominates, the intensity correlation is $2x + x^2$ with $x = \ee^{-2q^2D\tau}$,
+a mixture of Lorentzians at $q^2D/\pi$ and $2q^2D/\pi$, with an effective
+knee $\approx 1.24\,q^2D/\pi$. This was checked numerically in the
+sample-simulation work.
+
+For a polydisperse emulsion, the spectrum is a superposition of Lorentzians
+weighted by $|w_{jj'}|^2$, which is dominated by the large globules.
+
+\subsection{Link to the measured knees}
+
+L\'opez Zapata measured provolone on the EAFIT setup over 24 hours
+\cite[\S4.2.2]{lopez2026}. The spectra show a knee at
+$f_{t,\mathrm{knee}} \approx 5\times10^{-3}$--$10^{-2}\,$Hz that moves to lower
+frequencies as the cheese dries, plus excess power below $1\,$mHz. With
+Eq.~\eqref{eq:knee} and $q \approx 20.5\um^{-1}$, the knee corresponds to
+\begin{equation}
+  D = \frac{\pi f_{t,\mathrm{knee}}}{q^2} \approx 3.7\times10^{-5}\text{ to }
+  7.5\times10^{-5}\um^2/\mathrm{s}.
+\end{equation}
+Ref.~\cite{lopez2026} estimates $D \sim 1.8\times10^{-3}\um^2/\mathrm{s}$
+from $v = \lambda f_\mathrm{knee}$ and $D \sim v^2/(2f_\mathrm{knee})$. That
+relation does not include the scattering vector, which is why the two values
+differ.
+
+Goodwin et al.\ report knees at $3\,$mHz and $30\,$mHz \cite{goodwin2025}.
+If those spectra are of $|S_+|^2$ with Gaussian statistics, they correspond to
+$D = \pi f/(2q^2) \approx 1.1\times10^{-5}$ and $1.1\times10^{-4}\um^2/\mathrm{s}$
+(with $q \approx 20.4\um^{-1}$ at $839.6\nm$ and $30^\circ$).
+
+For the simulations, these values set the target: the globule diffusion
+coefficients in the LAMMPS model should fall around
+$10^{-5}$--$10^{-4}\um^2/\mathrm{s}$, and the run should follow the EAFIT
+protocol, with a frame every 5 s for about 7000 s.
+
+% =====================================================================
+\section{Open points}
+\label{sec:open}
+
+\begin{enumerate}[label=(O\arabic*)]
+  \item Illumination angle $\psi$ of the EAFIT setup. Fig.~3.9 of
+        Ref.~\cite{lopez2026} draws it oblique, but the text says illumination
+        and collection share an axis. The angle sets the direction of $\vq$
+        and the tilt of the coherence gate, and whether the specular
+        reflection from the plate bottom reaches the camera.
+  \item Diameters of the objective, of the field stop at the IP and of the
+        aperture before FL. They set the NA (resolution cell, globules per
+        cell, $\Delta\vq_\perp$), the field of view $L$ and the beam diameter
+        $D$ at the biprism.
+  \item Distance $d$ from the biprism to the camera, which sets the shear
+        $\eta_s$ and decides whether the half-plane approximation holds.
+  \item Exposure time and ROI used for the provolone acquisitions, and the
+        plate (material and bottom thickness).
+  \item Structure-factor correction to $\mu_s$ at $\phi\approx0.3$.
+  \item Multiple scattering (deferred), which shifts the knees upward and
+        makes the spectrum non-Lorentzian.
+\end{enumerate}
+
+% =====================================================================
+\begin{thebibliography}{9}
+
+\bibitem{goodwin2025}
+G.~Goodwin, D.~Lim, S.~Mahajan, and D.~D.~Nolte,
+``Fresnel biprism common-path low-coherence digital holography for dynamic
+light scattering spectroscopy of biological materials,''
+\emph{Biomed.\ Opt.\ Express} \textbf{16}(2), 806--819 (2025).
+doi:10.1364/BOE.543308
+
+\bibitem{lopez2026}
+A.~L\'opez Zapata,
+``Experimental and instrumental framework for dual channel angular
+multiplexing polarization holography (DCAMPH) and Doppler spectroscopy,''
+undergraduate thesis, EAFIT University, Medell\'in (2026).
+
+\bibitem{nolte2011}
+D.~D.~Nolte, R.~An, J.~Turek, and K.~Jeong,
+``Holographic tissue dynamics spectroscopy,''
+\emph{J.\ Biomed.\ Opt.} \textbf{16}(8), 087004 (2011).
+
+% TODO: verify volume/pages of this reference
+\bibitem{stocker2016}
+S.~Stocker, F.~Foschum, P.~Krauter, F.~Bergmann, A.~Hohmann, C.~Scalfi Happ,
+and A.~Kienle,
+``Broadband optical properties of milk,''
+\emph{Appl.\ Spectrosc.} \textbf{71}(5), 951--962 (2017).
+
+\bibitem{goodman}
+J.~W.~Goodman, \emph{Introduction to Fourier Optics}, 3rd ed.\
+(Roberts \& Company, 2005).
+
+\end{thebibliography}
+
+\end{document}

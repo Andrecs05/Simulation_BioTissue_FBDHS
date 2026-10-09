@@ -1,0 +1,36 @@
+\contentsline {section}{\numberline {1}Notation}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Fourier optics conventions}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Planes and coordinates}{2}{subsection.1.2}%
+\contentsline {section}{\numberline {2}Scope and assumptions}{3}{section.2}%
+\contentsline {section}{\numberline {3}The EAFIT instrument}{3}{section.3}%
+\contentsline {paragraph}{Sample.}{3}{section*.2}%
+\contentsline {section}{\numberline {4}Part I: Illumination (source to scatterer)}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Source spectrum and temporal coherence}{4}{subsection.4.1}%
+\contentsline {paragraph}{Spectral discretization.}{4}{section*.3}%
+\contentsline {subsection}{\numberline {4.2}Beam at the sample}{5}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Geometry and refraction}{5}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Ballistic attenuation}{5}{subsection.4.4}%
+\contentsline {paragraph}{Consequence for the sample size.}{6}{section*.4}%
+\contentsline {subsection}{\numberline {4.5}Result of Part I: field incident on globule $j$}{6}{subsection.4.5}%
+\contentsline {section}{\numberline {5}Scattering by a single globule}{6}{section.5}%
+\contentsline {section}{\numberline {6}Part II: Collection (scatterer to camera)}{6}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Coherent imaging by the objective}{6}{subsection.6.1}%
+\contentsline {paragraph}{Field stop at the image plane.}{7}{section*.5}%
+\contentsline {subsection}{\numberline {6.2}Fourier lens}{7}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Fresnel biprism: shear and carrier}{7}{subsection.6.3}%
+\contentsline {paragraph}{Propagation to the camera.}{7}{section*.6}%
+\contentsline {paragraph}{Half-plane approximation.}{8}{section*.7}%
+\contentsline {paragraph}{Overlap geometry and the EAFIT numbers.}{8}{section*.8}%
+\contentsline {paragraph}{Shear as a scattering-vector offset.}{8}{section*.9}%
+\contentsline {subsection}{\numberline {6.4}Low-coherence hologram}{8}{subsection.6.4}%
+\contentsline {paragraph}{Chromatic scaling.}{9}{section*.10}%
+\contentsline {subsection}{\numberline {6.5}Camera sampling and exposure}{9}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Reconstruction}{9}{subsection.6.6}%
+\contentsline {paragraph}{Reduced model.}{10}{section*.11}%
+\contentsline {section}{\numberline {7}Fluctuation spectrum}{10}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Observable}{10}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Brownian globules}{10}{subsection.7.2}%
+\contentsline {paragraph}{Field spectrum (EAFIT observable).}{10}{section*.12}%
+\contentsline {paragraph}{Intensity spectrum (Goodwin/Nolte observable).}{10}{section*.13}%
+\contentsline {subsection}{\numberline {7.3}Link to the measured knees}{11}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Open points}{11}{section.8}%

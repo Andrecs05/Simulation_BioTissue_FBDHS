@@ -1,5 +1,5 @@
 import numpy as np
-from geometry import capsule, dist_to_segment, shell, sphere, dist_to_point
+from geometry import capsule, dist_to_segment, shell, shell_bonds, sphere, dist_to_point
 from pathlib import Path
 
 
@@ -71,14 +71,18 @@ class Type:
             return shell(pos, self.r, self.s)
 
     def dist(self, p, pos, BOX):
-        """Distance from points p to the core of the object (centre or axis segment)."""
+        """Distance from points p to the core of the object (centre, axis segment, or shell surface)."""
         if self.geo == "sphere":
             return dist_to_point(p, pos, BOX)
+        if self.geo == "shell":
+            return np.abs(dist_to_point(p, pos, BOX) - self.r)
         c, a = pos
         return dist_to_segment(p, c, a, self.l / 2 - self.r, BOX)
 
     def half_extent(self):
         return self.r if self.geo == "sphere" else self.l / 2
+
+
 
 
 class Run:
@@ -90,8 +94,11 @@ class Run:
         self.rng = np.random.default_rng(rng)
         self.gap = gap
         self.types = []
+        self.medium_type = None      # atom type of the fluid outside the cell (set by fill_cytoplasm)
 
     def random_pos(self, t):
+        if t.geo == "shell":
+            return self.BOX / 2
         c = self.rng.uniform(0, 1, 3) * self.BOX
         if t.geo == "sphere":
             return c
@@ -99,13 +106,18 @@ class Run:
         return c, np.array([np.cos(th), np.sin(th), 0.0])
 
     def overlaps(self, t, pos):
-        """True if candidate t at pos touches anything already placed (any type)."""
+        """True if candidate t at pos touches anything already placed, or sticks out of the cell."""
         beads = t.beads(pos)
         for u in self.types + [t]:
             for q in u.positions:
+                if u.geo == "shell":
+                    if dist_to_point(beads, q, self.BOX).max() > u.r - self.gap:
+                        return True   # some bead is outside the cell or touching the membrane
+                    continue
                 if u.dist(beads, q, self.BOX).min() < u.r + self.gap:
                     return True
         return False
+
 
     def add_type(self, t, max_tries=100000):
         t.atom_type = len(self.types) + 2            # 1 is cytoplasm
@@ -120,35 +132,63 @@ class Run:
         self.types.append(t)
 
     def fill_cytoplasm(self, RHO):
-        cyto = self.rng.uniform(0, 1, (int(RHO * np.prod(self.BOX)), 3)) * self.BOX
+        fluid = self.rng.uniform(0, 1, (int(RHO * np.prod(self.BOX)), 3)) * self.BOX
         for t in self.types:
             for pos in t.positions:
-                cyto = cyto[t.dist(cyto, pos, self.BOX) > t.r]
-        self.cyto = cyto
+                cut = t.s if t.geo == "shell" else t.r     # shell: clear a band of width s around the surface
+                fluid = fluid[t.dist(fluid, pos, self.BOX) > cut]
+        self.cyto, self.medium = fluid, fluid[:0]
+        for t in self.types:
+            if t.geo == "shell":
+                inside = dist_to_point(fluid, t.positions[0], self.BOX) < t.r
+                self.cyto, self.medium = fluid[inside], fluid[~inside]
+                self.medium_type = len(self.types) + 2     # last atom type
+
 
     def write_data_file(self):
         atoms = [(0, 1, x, (0, 0, 0)) for x in self.cyto]
-        mol = 0
+        if self.medium_type:
+            atoms += [(0, self.medium_type, x, (0, 0, 0)) for x in self.medium]
+        bonds, mol = [], 0
         for t in self.types:
             for pos in t.positions:
                 mol += 1                              # unique molecule ID across all types
-                for x in t.beads(pos):
+                p = t.beads(pos)
+                if t.geo == "shell":
+                    first = len(atoms) + 1            # global atom ID of this shell's first bead
+                    i, j, d = shell_bonds(p, t.s)
+                    bonds += [(1 if dd < 1.2 * t.s else 2, first + a, first + b) for a, b, dd in zip(i, j, d)]
+                for x in p:
                     img = np.floor(x / self.BOX).astype(int)
                     atoms.append((mol, t.atom_type, x - img * self.BOX, img))
+        n_types = len(self.types) + 1 + (self.medium_type is not None)
         with open(self.run_dir / f"{self.in_name}.data", "w") as f:
-            f.write(f"{self.in_name}\n\n{len(atoms)} atoms\n{len(self.types) + 1} atom types\n\n")
-            f.write(f"0 {self.BOX[0]} xlo xhi\n0 {self.BOX[1]} ylo yhi\n0 {self.BOX[2]} zlo zhi\n\n")
+            f.write(f"{self.in_name}\n\n{len(atoms)} atoms\n{n_types} atom types\n")
+            if bonds:
+                f.write(f"{len(bonds)} bonds\n2 bond types\n")
+            f.write(f"\n0 {self.BOX[0]} xlo xhi\n0 {self.BOX[1]} ylo yhi\n0 {self.BOX[2]} zlo zhi\n\n")
             f.write("Masses\n\n1 1.0\n")
             for t in self.types:
                 f.write(f"{t.atom_type} {t.mass:.4f}  # {t.name}\n")
+            if self.medium_type:
+                f.write(f"{self.medium_type} 1.0  # medium\n")
             f.write("\nAtoms # bond\n\n")
             for i, (m, ty, x, img) in enumerate(atoms, start=1):
                 f.write(f"{i} {m} {ty} {x[0]:.5f} {x[1]:.5f} {x[2]:.5f} {img[0]} {img[1]} {img[2]}\n")
+            if bonds:
+                f.write("\nBonds\n\n")
+                for k, (ty, a, b) in enumerate(bonds, start=1):
+                    f.write(f"{k} {ty} {a} {b}\n")
         return len(atoms)
+
+    
     def write_input_file(self, T=1.0, a_cc=25.0, gamma=4.5, dt=0.01, steps=50000,
-                     dump_every=1000, msd_every=100, thermo_every=1000, seed=34387):
-        org = " ".join(str(t.atom_type) for t in self.types)
-        cutoff = max(t.half_extent() for t in self.types) + 1.5   # must exceed half the largest body
+                     dump_every=1000, msd_every=100, thermo_every=1000, seed=34387, k_bond=100.0):
+        rigid = [t for t in self.types if t.geo != "shell"]
+        mem = [t for t in self.types if t.geo == "shell"]
+        org = " ".join(str(t.atom_type) for t in rigid)
+        mobile = " ".join(["1"] + [str(t.atom_type) for t in mem] + ([str(self.medium_type)] if self.medium_type else []))
+        cutoff = max(t.half_extent() for t in rigid) + 1.5   # only rigid bodies need the long ghost cutoff
         L = ["units         lj", "atom_style    bond", "boundary      p p p",
             f"comm_modify   vel yes cutoff {cutoff:.1f}",
             "neighbor      0.3 bin", "neigh_modify  every 1 delay 0 check yes",
@@ -160,11 +200,22 @@ class Run:
             L.append(f"pair_coeff    {t.atom_type} {t.atom_type} {t.a_self} {gamma}")
             for u in self.types[i + 1:]:   # two different organelle types: mean of their a_self values
                 L.append(f"pair_coeff    {t.atom_type} {u.atom_type} {(t.a_self + u.a_self) / 2} {gamma}")
-        L += ["", "group         cyto type 1", f"group         org type {org}"]
+        if self.medium_type:
+            m = self.medium_type
+            L.append(f"pair_coeff    1 {m} {a_cc} {gamma}   # cytoplasm-medium")
+            L.append(f"pair_coeff    {m} {m} {a_cc} {gamma}")
+            for t in self.types:
+                L.append(f"pair_coeff    {t.atom_type} {m} {t.a_cyto} {gamma}   # {t.name}-medium")
+        if mem:
+            s = mem[0].s
+            L += ["", "bond_style    harmonic",
+                  f"bond_coeff    1 {k_bond} {s}",
+                  f"bond_coeff    2 {k_bond} {s * np.sqrt(2):.4f}"]
+        L += ["", "group         cyto type 1", f"group         org type {org}", f"group         mobile type {mobile}"]
         L += [f"group         {t.name} type {t.atom_type}" for t in self.types]
         L += ["neigh_modify  exclude molecule/intra org", "",
-            f"velocity      cyto create {T} 4928459 mom yes rot no",
-            "fix           fluid cyto nve",
+            f"velocity      mobile create {T} 4928459 mom yes rot no",
+            "fix           fluid mobile nve",
             "fix           bodies org rigid/small molecule", "",
             "compute       chunks org chunk/atom molecule",
             "compute       msd org msd/chunk chunks",
@@ -173,6 +224,7 @@ class Run:
             f"dump          traj all custom {dump_every} dump.{self.in_name} id mol type x y z ix iy iz",
             f"run           {steps}", ""]
         (self.run_dir / f"in.{self.in_name}").write_text("\n".join(L))
+
 
 def read_type_names(data_path):
     """Masses section of the data file -> {atom_type: name}, using the '# name' comments."""
