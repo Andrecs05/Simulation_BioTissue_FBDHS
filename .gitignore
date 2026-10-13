@@ -5,3 +5,7 @@ DPD tissue/code/runs/run_files/dump.m1
 DPD tissue/code/runs/test_run/dump.m1_crowded_mix
 DPD tissue/code/runs/test_run/dump.m1_mix
 DPD tissue/code/runs/cell/dump.cell
+DPD tissue/code/runs/cell_1/dump.cell
+DPD tissue/code/runs/cell_2/dump.cell
+DPD tissue/code/runs/cell_0/dump.cell
+DPD tissue/code/runs/cell_3/dump.cell

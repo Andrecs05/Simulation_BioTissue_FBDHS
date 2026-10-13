@@ -186,3 +186,24 @@ def plot_field(U, X, Y, title, z=0, lam=None, thresh=1e-2):
 
     plt.tight_layout()
     plt.show()
+
+def crop(U, X, Y, half):
+    """
+    Crop a field and its coordinate grids to a centred square.
+
+    Parameters:
+    U : 2D array
+        Complex field.
+    X, Y : 2D arrays
+        Coordinate grids.
+    half : float
+        Half width of the square to keep (same units as X, Y).
+
+    Returns:
+    U_c, X_c, Y_c : 2D arrays
+        Cropped field and coordinate grids.
+    """
+    cx = np.abs(X[0]) <= half
+    cy = np.abs(Y[:, 0]) <= half
+
+    return U[np.ix_(cy, cx)], X[np.ix_(cy, cx)], Y[np.ix_(cy, cx)]

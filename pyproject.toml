@@ -4,4 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "ipykernel>=7.4.0",
+    "matplotlib>=3.11.2",
+    "mdanalysis>=2.10.0",
+    "miepython>=3.3.0",
+    "numpy>=2.5.4",
+    "scipy>=1.18.1",
+    "sympy>=1.14.0",
+]

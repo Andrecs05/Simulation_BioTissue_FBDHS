@@ -183,7 +183,8 @@ class Run:
 
     
     def write_input_file(self, T=1.0, a_cc=25.0, gamma=4.5, dt=0.01, steps=50000,
-                     dump_every=1000, msd_every=100, thermo_every=1000, seed=34387, k_bond=100.0):
+                     dump_every=1000, msd_every=100, thermo_every=1000, seed=34387,
+                     k_bond=100.0, dump_group="all"):
         rigid = [t for t in self.types if t.geo != "shell"]
         mem = [t for t in self.types if t.geo == "shell"]
         org = " ".join(str(t.atom_type) for t in rigid)
@@ -213,15 +214,17 @@ class Run:
                   f"bond_coeff    2 {k_bond} {s * np.sqrt(2):.4f}"]
         L += ["", "group         cyto type 1", f"group         org type {org}", f"group         mobile type {mobile}"]
         L += [f"group         {t.name} type {t.atom_type}" for t in self.types]
+        if dump_group != "all":
+            L.append(f"group         dumped union {dump_group}")
         L += ["neigh_modify  exclude molecule/intra org", "",
-            f"velocity      mobile create {T} 4928459 mom yes rot no",
+            f"velocity      mobile create {T} {seed + 1} mom yes rot no",
             "fix           fluid mobile nve",
             "fix           bodies org rigid/small molecule", "",
             "compute       chunks org chunk/atom molecule",
             "compute       msd org msd/chunk chunks",
             f"fix           msdout org ave/time {msd_every} 1 {msd_every} c_msd[4] file msd_org.dat mode vector", "",
             f"timestep      {dt}", f"thermo        {thermo_every}",
-            f"dump          traj all custom {dump_every} dump.{self.in_name} id mol type x y z ix iy iz",
+            f"dump          traj {'all' if dump_group == 'all' else 'dumped'} custom {dump_every} dump.{self.in_name} id mol type x y z ix iy iz",
             f"run           {steps}", ""]
         (self.run_dir / f"in.{self.in_name}").write_text("\n".join(L))
 
@@ -263,3 +266,34 @@ def read_dump_com_typed(path):
             if len(steps) == 1:
                 types = np.array([int(data[mol == m, c["type"]][0]) for m in ids])
     return np.array(steps), np.array(coms), ids, types
+
+def compress_dump(run_dir, name="cell", membrane="membrane"):
+    """dump.<name> (membrane + organelle beads) -> <run_dir>/traj.npz with, per frame,
+    one centre of mass per organelle and every membrane bead, both relative to the membrane's
+    centre of mass (so the cell stays centred in its tile)."""
+    run_dir = Path(run_dir)
+    names = read_type_names(run_dir / f"{name}.data")
+    mem_type = [t for t, n in names.items() if n == membrane][0]
+    steps, coms, mems = [], [], []
+    with open(run_dir / f"dump.{name}") as f:
+        while f.readline().startswith("ITEM: TIMESTEP"):
+            steps.append(int(f.readline()))
+            f.readline(); n = int(f.readline())
+            f.readline()
+            box = np.array([np.ptp([float(v) for v in f.readline().split()[:2]]) for _ in range(3)])
+            cols = f.readline().split()[2:]
+            data = np.loadtxt([f.readline() for _ in range(n)])
+            data = data[np.argsort(data[:, cols.index("id")])]          # same bead order every frame
+            c = {k: i for i, k in enumerate(cols)}
+            pos = data[:, [c["x"], c["y"], c["z"]]] + data[:, [c["ix"], c["iy"], c["iz"]]] * box
+            mol, typ = data[:, c["mol"]].astype(int), data[:, c["type"]].astype(int)
+            is_mem = typ == mem_type
+            centre = pos[is_mem].mean(axis=0)
+            ids = np.unique(mol[~is_mem])
+            coms.append([pos[mol == m].mean(axis=0) - centre for m in ids])
+            mems.append(pos[is_mem] - centre)
+            if len(steps) == 1:
+                org_type = np.array([typ[mol == m][0] for m in ids])
+    np.savez_compressed(run_dir / "traj.npz", steps=np.array(steps),
+                        com=np.array(coms, np.float32), mem=np.array(mems, np.float32),
+                        org_type=org_type, type_names=np.array([names[t] for t in org_type]))
