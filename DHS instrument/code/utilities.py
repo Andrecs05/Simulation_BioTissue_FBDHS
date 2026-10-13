@@ -71,36 +71,6 @@ def pupil(X, Y, radius):
     """
     return ((X**2 + Y**2) <= radius**2).astype(float)
 
-def lens_transmitance(X, Y, f, lam, radius):
-    """
-    Create a lens transmittance function.
-
-    Parameters:
-    X, Y : 2D arrays
-        Coordinate grids.
-    f : float
-        Focal length of the lens.
-    lam : float
-        Wavelength of the light.
-    radius : float
-        Radius of the lens (same units as X, Y).
-
-    Returns:
-    L : 2D array
-        Lens transmittance function.
-    """
-    # Compute the phase delay introduced by the lens
-    phase_delay = (np.pi / (lam * f)) * (X**2 + Y**2)
-
-    pupil_mask = pupil(X, Y, radius)
-
-    # Create lens transmittance function
-    L = np.exp(-1j * phase_delay)
-    L *= pupil_mask
-
-    return L
-
-
 def gaussian_beam(x, y, z, k, w0, iris_radius=None):
     """
     Generate a Gaussian beam field.
@@ -207,3 +177,38 @@ def crop(U, X, Y, half):
     cy = np.abs(Y[:, 0]) <= half
 
     return U[np.ix_(cy, cx)], X[np.ix_(cy, cx)], Y[np.ix_(cy, cx)]
+
+def fresnel_fft(U, X, Y, lam, z):
+    """
+    Propagate a field a distance z with the single-FFT Fresnel transform.
+
+    Parameters:
+    U : 2D array
+        Input field.
+    X, Y : 2D arrays
+        Coordinate grids from make_grid (in micrometers).
+    lam : float
+        Wavelength (in micrometers).
+    z : float
+        Propagation distance (in micrometers).
+
+    Returns:
+    U2 : 2D array
+        Field at distance z.
+    X2, Y2 : 2D arrays
+        Output coordinate grids, with spacing lam * z / (N * dx).
+    """
+    ny, nx = U.shape
+    dx = X[0, 1] - X[0, 0]
+    dy = Y[1, 0] - Y[0, 0]
+    k = 2 * np.pi / lam
+
+    # Output grid: its spacing is set by z
+    X2, Y2 = make_grid((ny, nx), lam * z / (nx * dx), lam * z / (ny * dy))
+
+    # Input chirp, centred FFT, output chirp
+    U1 = U * np.exp(1j * k / (2 * z) * (X**2 + Y**2))
+    G = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(U1))) * dx * dy
+    U2 = np.exp(1j * k * z) / (1j * lam * z) * np.exp(1j * k / (2 * z) * (X2**2 + Y2**2)) * G
+
+    return U2, X2, Y2
