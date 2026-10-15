@@ -1128,9 +1128,29 @@ coherence $\gamma(\Delta L_{jj'})$ of the source, with
 $\Delta L_{jj'} = \hat\vq\cdot(\vr_j-\vr_{j'})\,|\vq|/k$, so that only pairs
 whose path difference is below the coherence length,
 $l_c = (2\ln2/\pi)\lambda_0^2/\Delta\lambda = 5.3\um$, contribute. This is the
-coherence gate. The fringe period $\Lambda$ and the camera scale
-$\lambda f_2$ both grow with $\lambda$, but their ratio does not, so all
-wavelengths put the sideband at the same image-plane lag. For a cell monolayer
+coherence gate.
+
+\paragraph{Smear of the sideband.}
+The fringe period $\Lambda = \lambda/(2\theta)$ and the camera scale
+$\lambda f_2$ both grow with $\lambda$, so in image-plane lag
+$(\Delta u,\Delta v)$ every wavelength puts the sideband at the same place,
+$2\theta f_2$ from the zero order. The processing, however, works in camera
+spatial frequency, which is fixed by the pixels and not by $\lambda$. There,
+a pair of organelles at lag $\Delta u$ appears at
+\begin{equation}
+  f = \frac{2\theta f_2 + \Delta u}{\lambda f_2} \approx \frac{2\theta}{\lambda},
+\end{equation}
+so the carrier, and the whole sideband with it, slides along $\ve$ as
+$\lambda$ changes. Over the simulated band ($780$--$934\nm$, $\pm3\sigma_k$) the
+carrier runs from $0.114$ to $0.095\um^{-1}$, i.e.\ $\pm0.0094\um^{-1}$, which
+is larger than the sideband radius $2R_\mathrm{IP}/(\lambda f_2)\approx0.006\um^{-1}$.
+A circular window centred on the carrier of $\lambda_0$ therefore loses most
+of the off-centre wavelengths. The window has to cover the segment of carriers
+$[2\theta/\lambda_\mathrm{max},\,2\theta/\lambda_\mathrm{min}]$ along $\ve$,
+widened by the sideband radius of the shortest wavelength (a stadium-shaped
+window, about 9200 pixels here). Since the window is linear in $I_H$, the
+broadband sideband is $\sum_k S(k)\,S_+(k)$, and its power spectrum, not the
+weighted sum of the per-wavelength spectra, is the observable. For a cell monolayer
 ($\sim6\um$ thick) the gate removes few pairs, which is why the monochromatic
 model is a reasonable first step; for a thick provolone sample it is
 essential.
