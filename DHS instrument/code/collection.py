@@ -134,4 +134,4 @@ def sideband(I, p, Lambda, e_deg=45.0, radius=None):
     c = e / Lambda
     mask = np.hypot(FX - c[0], FY - c[1]) <= radius
 
-    return F[mask]
+    return F[mask]  
