@@ -1,0 +1,197 @@
+"""
+Collapsed FB-DHS model: the illumination as one apodized pupil and the collection as one Fourier lens.
+
+Runs the cell sample through the collapsed chain (Section 4 of the final report), saves S+ for every
+frame, and fits the knee of the fluctuation spectrum. Optionally compares one frame with the full chain.
+
+Paths are resolved from this file's location, so it can be run from any folder:
+    python single_lens_model                # 1400 frames, about 20 min
+    python single_lens_model 50 --compare   # quick test: 50 frames + full-chain check
+Outputs (S_single_lens.npy, spectrum_single_lens.png) are written next to this file.
+"""
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+CODE_DIR = Path(__file__).resolve().parent              # DHS instrument/code: utilities.py, collection.py, ...
+DPD_DIR = CODE_DIR.parents[1] / 'DPD tissue' / 'code'   # layout.npz and runs/cell_k/traj.npz
+sys.path.insert(0, str(CODE_DIR))
+
+from utilities import make_grid, angular_spectrum, pupil, fresnel_fft
+from ilumination import source_field, mirror_pupil
+from collection import camera_hologram, sideband, lens_transmitance
+from doppler_scattering import scattering_vector, mie_amplitude, object_amplitudes, field_after_sample
+from spectrum import field_spectrum, log_bin, knee_frequency
+
+
+def illumination_1pupil(X, Y, lam, w0, R_M1, th_M1, z_s):
+    """
+    Illumination at the sample as one apodized pupil propagated once.
+
+    Parameters:
+    X, Y : 2D arrays
+        Coordinate grids (in micrometers).
+    lam : float
+        Wavelength (in micrometers).
+    w0 : float
+        Beam waist of the source (in micrometers).
+    R_M1 : float
+        Radius of mirror M1 (in micrometers).
+    th_M1 : float
+        Incidence angle on M1 (in degrees).
+    z_s : float
+        Distance from M1 to the sample (in micrometers).
+
+    Returns:
+    U : 2D array
+        Complex illumination field at the sample plane.
+    """
+    # z_R = pi w0^2 / lam = 15 m >> z_M1, so the beam reaches M1 unchanged: source + M1 = one pupil
+    P = np.exp(-(X**2 + Y**2) / w0**2) * mirror_pupil(X, Y, R_M1, th_M1)
+
+    # One angular-spectrum step from M1 to the sample
+    dx, dy = X[0, 1] - X[0, 0], Y[1, 0] - Y[0, 0]
+    return angular_spectrum(P, dx, dy, z_s, lam)
+
+
+def collection_1lens(U_o, X, Y, lam, f1, R1, R_IP, f2, xc, yc, theta, d):
+    """
+    Hologram on the camera with the collection arm collapsed to one Fourier lens.
+
+    Parameters:
+    U_o : 2D array
+        Complex field just after the sample.
+    X, Y : 2D arrays
+        Coordinate grids of U_o (in micrometers).
+    lam : float
+        Wavelength (in micrometers).
+    f1, R1 : float
+        Focal length and radius of the objective (in micrometers).
+    R_IP : float
+        Radius of the image-plane field stop (in micrometers).
+    f2 : float
+        Focal length of the Fourier lens (in micrometers).
+    xc, yc : 1D arrays
+        Camera pixel coordinates (in micrometers).
+    theta : float
+        Biprism deflection (in radians).
+    d : float
+        Biprism-camera distance (in micrometers).
+
+    Returns:
+    I : 2D array
+        Hologram intensity on the camera.
+    """
+    k = 2 * np.pi / lam
+    dx, dy = X[0, 1] - X[0, 0], Y[1, 0] - Y[0, 0]
+
+    # Objective pupil -> coherent low-pass filter with cutoff NA1/lam, NA1 = R1/(2 f1)
+    FX, FY = np.meshgrid(np.fft.fftfreq(X.shape[1], dx), np.fft.fftfreq(X.shape[0], dy))
+    H = np.hypot(FX, FY) <= R1 / (2 * f1 * lam)
+    U = np.fft.ifft2(np.fft.fft2(U_o) * H)
+
+    # Equivalent pupil: field stop imaged at |M| = 1 and the residual phase of the 2f-2f image
+    U = U * pupil(X, Y, R_IP) * np.exp(1j * k * (X**2 + Y**2) / (2 * f1))
+
+    # One Fourier lens f2 on mirrored axes (M = -1), then the biprism
+    return camera_hologram(U, -X, -Y, lam, f2, xc, yc, theta, d)
+
+
+def full_collection(U_o, X, Y, lam, f1, R1, R_IP, f2, xc, yc, theta, d):
+    """
+    Hologram with the full collection chain (Fresnel 2f1, lens, Fresnel 2f1, field stop, Fourier lens).
+
+    Parameters and Returns are the same as collection_1lens.
+    """
+    U1, X1, Y1 = fresnel_fft(U_o, X, Y, lam, 2 * f1)
+    U1 = U1 * lens_transmitance(X1, Y1, f1, lam, R1)
+    Ui, Xi, Yi = fresnel_fft(U1, X1, Y1, lam, 2 * f1)
+    return camera_hologram(Ui * pupil(Xi, Yi, R_IP), Xi, Yi, lam, f2, xc, yc, theta, d)
+
+
+def rel_error(a, b):
+    """
+    Relative l2 error of b with respect to a, after the best complex scale.
+
+    Parameters:
+    a, b : arrays
+        Arrays to compare (b is the reference).
+
+    Returns:
+    err : float
+        ||b - c a|| / ||b|| with c chosen to minimize it.
+    """
+    c = np.vdot(a, b) / np.vdot(a, a)
+    return np.linalg.norm(b - c * a) / np.linalg.norm(b)
+
+
+if __name__ == '__main__':
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    n_frames = int(args[0]) if args else 1400
+    compare = '--compare' in sys.argv
+
+    # Parameters (Table 1 of the report), lengths in micrometers
+    lam, w0, R_M1, th_M1, z_M1, z_s = 0.850, 2e3, 3e3, 30, 50e3, 50e3
+    f1, R1, R_IP, f2 = 75e3, 12.7e3, 500, 150e3
+    theta, d_B, p = 0.51 * np.radians(5), 140e3, 3.75
+    xc = (np.arange(1280) - 640) * p
+    yc = (np.arange(960) - 480) * p
+    Lambda = lam / (2 * theta)
+    r_sb = 1.3 * R_IP / (lam * f2)
+
+    # Illumination on the 4096^2 grid, then crop the central 2 mm for the sample
+    X, Y = make_grid((4096, 4096), 2, 2)
+    U_ill_full = illumination_1pupil(X, Y, lam, w0, R_M1, th_M1, z_s)
+    s = slice(2048 - 512, 2048 + 512)
+    if compare:
+        U_two = angular_spectrum(angular_spectrum(source_field(X, Y, lam, w0), 2, 2, z_M1, lam)
+                                 * mirror_pupil(X, Y, R_M1, th_M1), 2, 2, z_s, lam)
+        disk = np.hypot(X, Y) <= 500
+        print(f'illumination error on the 1 mm disk: {rel_error(U_ill_full[disk], U_two[disk]):.1e}')
+        del U_two, disk
+    U_ill, Xc, Yc = U_ill_full[s, s], X[s, s], Y[s, s]
+    del X, Y, U_ill_full
+
+    # Cell sample from the DPD runs
+    trajs = [dict(np.load(DPD_DIR / 'runs' / f'cell_{k}' / 'traj.npz')) for k in range(4)]
+    layout = dict(np.load(DPD_DIR / 'layout.npz'))
+    q, th = scattering_vector()
+    amps = object_amplitudes(layout, trajs, {'nucleus': mie_amplitude(1.0, 1.39, 1.36, th),
+                                             'mitochondrion': mie_amplitude(0.44, 1.41, 1.36, th),
+                                             'vesicle': mie_amplitude(0.25, 1.40, 1.36, th)})
+
+    # Optional check of one frame against the full collection chain
+    if compare:
+        U_o = field_after_sample(0, U_ill, Xc, Yc, layout, trajs, amps, q)
+        I_col = collection_1lens(U_o, Xc, Yc, lam, f1, R1, R_IP, f2, xc, yc, theta, d_B)
+        I_full = full_collection(U_o, Xc, Yc, lam, f1, R1, R_IP, f2, xc, yc, theta, d_B)
+        print(f'hologram error: {rel_error(I_col, I_full):.3f}')
+        print(f'S+ error: {rel_error(sideband(I_col, p, Lambda, radius=r_sb), sideband(I_full, p, Lambda, radius=r_sb)):.3f}')
+
+    # Collapsed chain for every frame
+    S, t0 = [], time.time()
+    for k in range(n_frames):
+        U_o = field_after_sample(k, U_ill, Xc, Yc, layout, trajs, amps, q)
+        I = collection_1lens(U_o, Xc, Yc, lam, f1, R1, R_IP, f2, xc, yc, theta, d_B)
+        S.append(sideband(I, p, Lambda, radius=r_sb))
+        if (k + 1) % 100 == 0:
+            print(f'{k + 1} frames, {(time.time() - t0) / (k + 1):.2f} s/frame', flush=True)
+            np.save(CODE_DIR / 'S_single_lens.npy', np.array(S))
+    S = np.array(S)
+    np.save(CODE_DIR / 'S_single_lens.npy', S)
+
+    # Fluctuation spectrum and knee
+    f, P = field_spectrum(S)
+    fk = knee_frequency(f, P)
+    D = np.pi * fk / np.sum(q**2)
+    print(f'knee {fk * 1e3:.2f} mHz  ->  D = {D:.3e} um^2/s')
+
+    plt.loglog(f, P, alpha=0.4)
+    plt.loglog(*log_bin(f, P), 'o')
+    plt.axvline(fk, ls='--')
+    plt.xlabel('f (Hz)'); plt.ylabel('PSD')
+    plt.title(f'single pupil + single lens: knee {fk * 1e3:.2f} mHz')
+    plt.savefig(CODE_DIR / 'spectrum_single_lens.png', dpi=200)

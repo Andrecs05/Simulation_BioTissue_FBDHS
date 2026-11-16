@@ -139,3 +139,34 @@ def field_after_sample(k, U_ill, X, Y, layout, trajs, amps, q, tiles=None):
     np.add.at(U, (iy, ix), U_ill[iy, ix] * amps * np.exp(1j * (r @ q)))
 
     return U
+
+def paper_field(U_ill, X, Y, corr=0.0, rng=None):
+    """
+    Field just after a white paper sample, modeled as a random phase screen.
+
+    Parameters:
+    U_ill : 2D array
+        Illumination field at the sample plane.
+    X, Y : 2D arrays
+        Coordinate grids of U_ill (in micrometers).
+    corr : float, optional
+        Correlation length of the surface (in micrometers). Default is 0 (independent pixels).
+    rng : np.random.Generator, optional
+        Random number generator. Default is a new one.
+
+    Returns:
+    U_o : 2D array
+        Complex field just after the paper.
+    """
+    rng = np.random.default_rng() if rng is None else rng
+
+    # Circular Gaussian field: Rayleigh amplitude, uniform phase
+    g = rng.standard_normal(X.shape) + 1j * rng.standard_normal(X.shape)
+
+    # Smooth to the fibre correlation length (optional)
+    if corr > 0:
+        dx = X[0, 1] - X[0, 0]
+        FX, FY = np.meshgrid(np.fft.fftfreq(X.shape[1], dx), np.fft.fftfreq(X.shape[0], dx))
+        g = np.fft.ifft2(np.fft.fft2(g) * np.exp(-(np.pi * corr)**2 * (FX**2 + FY**2)))
+
+    return U_ill * g / np.sqrt(np.mean(np.abs(g)**2))

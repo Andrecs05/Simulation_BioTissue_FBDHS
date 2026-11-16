@@ -116,7 +116,7 @@ def gaussian_beam(x, y, z, k, w0, iris_radius=None):
 
     return U
 
-def plot_field(U, X, Y, title, z=0, lam=None, thresh=1e-2):
+def plot_field(U, X, Y, title=None, z=0, lam=None, thresh=1e-2):
     """
     Plot amplitude and phase of a complex field side by side.
 
@@ -145,14 +145,18 @@ def plot_field(U, X, Y, title, z=0, lam=None, thresh=1e-2):
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     im0 = axes[0].imshow(amp, extent=extent, origin='lower', cmap='gray')
-    axes[0].set_title(f'Field Amplitude {title}')
-    axes[0].set_xlabel('x (µm)'); axes[0].set_ylabel('y (µm)')
-    fig.colorbar(im0, ax=axes[0])
+    if title is not None:
+        axes[0].set_title(f'Field Amplitude {title}', fontsize=16)
+    axes[0].set_xlabel('x (µm)', fontsize=14); axes[0].set_ylabel('y (µm)', fontsize=14)
+    axes[0].tick_params(labelsize=12)
+    fig.colorbar(im0, ax=axes[0]).ax.tick_params(labelsize=12)
 
     im1 = axes[1].imshow(phase, extent=extent, origin='lower', cmap='twilight', vmin=-np.pi, vmax=np.pi)
-    axes[1].set_title(f'Field Phase {title}')
-    axes[1].set_xlabel('x (µm)'); axes[1].set_ylabel('y (µm)')
-    fig.colorbar(im1, ax=axes[1], label='rad')
+    if title is not None:
+        axes[1].set_title(f'Field Phase {title}', fontsize=16)
+    axes[1].set_xlabel('x (µm)', fontsize=14); axes[1].set_ylabel('y (µm)', fontsize=14)
+    axes[1].tick_params(labelsize=12)
+    fig.colorbar(im1, ax=axes[1], label='rad').ax.tick_params(labelsize=12)
 
     plt.tight_layout()
     plt.show()
